@@ -7,7 +7,22 @@
 using namespace esp_panel::drivers;
 using namespace esp_panel::board;
 
-static lv_obj_t *meter;
+const lv_color_t MAIN_COLOR = lv_color_hex(/*0x5f162e*/ 0x932348);
+
+lv_obj_t *meter;
+
+static void meter_event_callback(lv_event_t *e) {
+  lv_event_code_t code = lv_event_get_code(e);
+
+  if (code == LV_EVENT_DRAW_PART_BEGIN) {
+    lv_obj_draw_part_dsc_t *dsc = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
+
+    if (dsc->value % 100 == 0) {
+      dsc->value /= 100;
+      lv_snprintf(dsc->text, sizeof(dsc->text), "%d", dsc->value);
+    }
+  }
+}
 
 void setup() {
   String title = "LVGL porting example";
@@ -47,6 +62,9 @@ void setup() {
   lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);
 
   meter = lv_meter_create(lv_scr_act());
+
+  lv_obj_add_event_cb(meter, meter_event_callback, LV_EVENT_DRAW_PART_BEGIN, NULL);
+
   lv_obj_align(meter, LV_ALIGN_CENTER, 0, 210);
   lv_obj_set_size(meter, 940, 940);
   lv_obj_set_style_bg_color(meter, lv_color_black(), LV_PART_MAIN);
@@ -56,23 +74,24 @@ void setup() {
 
   lv_meter_set_scale_range(meter, scale, 0, 700, 190, 175);
   lv_meter_set_scale_ticks(meter, scale, 36, 4, 40, lv_palette_main(LV_PALETTE_GREY));
-  lv_meter_set_scale_major_ticks(meter, scale, 5, 14, 40, lv_color_white(), 70);
-  lv_obj_set_style_text_font(meter, &lv_font_montserrat_40, LV_PART_MAIN);
+  lv_meter_set_scale_major_ticks(meter, scale, 5, 14, 40, lv_color_white(), 40);
+  lv_obj_set_style_text_font(meter, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_set_style_text_color(meter, lv_color_white(), 0);
 
   lv_meter_indicator_t *indic;
 
   // Add a red arc to the end
-  indic = lv_meter_add_arc(meter, scale, 40, lv_palette_main(LV_PALETTE_RED), 0);
+  indic = lv_meter_add_arc(meter, scale, 40, MAIN_COLOR, 0);
   lv_meter_set_indicator_start_value(meter, indic, 600);
   lv_meter_set_indicator_end_value(meter, indic, 700);
 
   // Make the tick lines red at the end of the scale
-  indic = lv_meter_add_scale_lines(meter, scale, lv_palette_main(LV_PALETTE_RED), lv_palette_main(LV_PALETTE_RED), false, 0);
+  indic = lv_meter_add_scale_lines(meter, scale, MAIN_COLOR, MAIN_COLOR, false, 0);
   lv_meter_set_indicator_start_value(meter, indic, 600);
   lv_meter_set_indicator_end_value(meter, indic, 700);
 
   // Add a needle line indicator
-  indic = lv_meter_add_needle_line(meter, scale, 14, lv_palette_main(LV_PALETTE_RED), -60);
+  indic = lv_meter_add_needle_line(meter, scale, 14, MAIN_COLOR, -60);
 
   lv_meter_set_indicator_value(meter, indic, 150);
 
