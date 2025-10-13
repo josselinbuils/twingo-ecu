@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <esp_display_panel.hpp>
+#include <esp_io_expander.hpp>
 #include <lvgl.h>
 
 #include "lvgl_v8_port.h"
@@ -8,11 +9,25 @@
 using namespace esp_panel::drivers;
 using namespace esp_panel::board;
 
+// I2C Pin define
+#define EXPANDER_I2C_ADDR (ESP_IO_EXPANDER_I2C_CH422G_ADDRESS)
+#define EXPANDER_I2C_SDA_PIN 8         // I2C data line pins
+#define EXPANDER_I2C_SCL_PIN 9         // I2C clock line pin
+#define EXPANDER_DI0 0                 // Digital Input 0
+#define EXPANDER_DI0_mask 1ULL << DI0  // Mask for Digital Input 0
+
 static const lv_color_t BACKGROUND_COLOR = lv_color_black();
 static const lv_color_t PRIMARY_COLOR = lv_color_hex(0x932348);
+static const byte IGNITION_INTERRUPT_PIN = EXPANDER_DI0;
 
+static esp_expander::CH422G *expander = NULL;
 static lv_obj_t *img;
 static lv_obj_t *meter;
+static lv_meter_indicator_t *indic;
+
+static int ignition_counter = 0;
+static int last_ignition_status = LOW;
+static long last_time_ms = 0;
 
 static void meter_event_callback(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
@@ -20,8 +35,8 @@ static void meter_event_callback(lv_event_t *e) {
   if (code == LV_EVENT_DRAW_PART_BEGIN) {
     lv_obj_draw_part_dsc_t *dsc = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
 
-    if (dsc->value % 100 == 0) {
-      dsc->value /= 100;
+    if (dsc->value % 1000 == 0) {
+      dsc->value /= 1000;
       lv_snprintf(dsc->text, sizeof(dsc->text), "%d", dsc->value);
     }
   }
@@ -58,6 +73,7 @@ void setup() {
   lvgl_port_init(board->getLCD(), board->getTouch());
 
   Serial.println("Creating UI");
+
   // Lock the mutex due to the LVGL APIs are not thread-safe
   lvgl_port_lock(-1);
 
@@ -90,8 +106,6 @@ void setup() {
   lv_obj_set_style_text_font(meter, &lv_font_montserrat_48, LV_PART_MAIN);
   lv_obj_set_style_text_color(meter, lv_color_white(), 0);
 
-  lv_meter_indicator_t *indic;
-
   // Add a red arc to the end
   indic = lv_meter_add_arc(meter, scale, 40, PRIMARY_COLOR, 0);
   lv_meter_set_indicator_start_value(meter, indic, 6000);
@@ -105,13 +119,35 @@ void setup() {
   // Add a needle line indicator
   indic = lv_meter_add_needle_line(meter, scale, 14, PRIMARY_COLOR, -60);
 
-  lv_meter_set_indicator_value(meter, indic, 800);
-
   // Release the mutex
   lvgl_port_unlock();
+
+  Serial.println("Initialize IO expander");
+  expander = new esp_expander::CH422G(EXPANDER_I2C_SCL_PIN, EXPANDER_I2C_SDA_PIN, EXPANDER_I2C_ADDR);
+  expander->init();
+  expander->begin();
+  expander->pinMode(IGNITION_INTERRUPT_PIN, INPUT_PULLUP);
 }
 
 void loop() {
-  Serial.println("IDLE loop");
-  delay(1000);
+  int ignition_status = expander->digitalRead(IGNITION_INTERRUPT_PIN);
+
+  if (ignition_status != last_ignition_status) {
+    ignition_counter++;
+    last_ignition_status = ignition_status;
+  }
+
+  if (millis() - last_time_ms > 300) {
+    last_time_ms = millis();
+
+    int rpm = 0;
+
+    if (ignition_counter > 0) {
+      rpm = ignition_counter * 60000 / 300;
+    }
+    ignition_counter = 0;
+
+    lv_meter_set_indicator_value(meter, indic, rpm);
+    Serial.print("RPM: " + String(rpm));
+  }
 }
