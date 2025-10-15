@@ -14,6 +14,9 @@
 
 // *INDENT-OFF*
 
+// Custom config
+#define CONFIG_LVGL_PORT_AVOID_TEARING_MODE     (2)
+
 /**
  * LVGL related parameters, can be adjusted by users
  */
@@ -74,7 +77,7 @@
 #define LVGL_PORT_AVOID_TEARING_MODE            (CONFIG_LVGL_PORT_AVOID_TEARING_MODE)
                                                         // Valid if using ESP-IDF
 #else
-#define LVGL_PORT_AVOID_TEARING_MODE            (2)     // Valid if using Arduino
+#define LVGL_PORT_AVOID_TEARING_MODE            (0)     // Valid if using Arduino
 #endif
 
 #if LVGL_PORT_AVOID_TEARING_MODE != 0
