@@ -15,8 +15,7 @@
 
 #pragma once
 
-#define ESP_PANEL_USE_1024_600_LCD           (1)     // 0: 800x480, 1: 1024x600
-#define ESP_OPEN_TOUCH 0 // 1 initiates the touch, 0 closes the touch.
+// *INDENT-OFF*
 
 /**
  * @brief Flag to enable custom board configuration (0/1)
@@ -32,24 +31,14 @@
 /**
  * @brief Board name (format: "Manufacturer:Model")
  */
-#if ESP_PANEL_USE_1024_600_LCD
-    #define ESP_PANEL_BOARD_NAME                "Waveshare:ESP32-S3-Touch-LCD-5B"
-#else
-    #define ESP_PANEL_BOARD_NAME                "Waveshare:ESP32-S3-Touch-LCD-5"
-#endif
+#define ESP_PANEL_BOARD_NAME                "Waveshare:ESP32-S3-Touch-LCD-5B"
 
 /**
  * @brief Panel resolution configuration in pixels
  */
-#if ESP_PANEL_USE_1024_600_LCD
-    /* LCD resolution in pixels */
-    #define ESP_PANEL_BOARD_WIDTH         (1024)
-    #define ESP_PANEL_BOARD_HEIGHT        (600)
-#else
-  /* LCD resolution in pixels */
-    #define ESP_PANEL_BOARD_WIDTH         (800)
-    #define ESP_PANEL_BOARD_HEIGHT        (480)
-#endif
+#define ESP_PANEL_BOARD_WIDTH               (1024)   // Panel width (horizontal, in pixels)
+#define ESP_PANEL_BOARD_HEIGHT              (600)   // Panel height (vertical, in pixels)
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////// Please update the following macros to configure the LCD panel /////////////////////////////
@@ -64,11 +53,29 @@
 #if ESP_PANEL_BOARD_USE_LCD
 /**
  * @brief LCD controller selection
+ *
+ * Supported controllers:
+ * - `AXS15231B`
+ * - `EK9716B`, `EK79007`
+ * - `GC9A01`, `GC9B71`, `GC9503`
+ * - `HX8399`
+ * - `ILI9341`, `ILI9881C`
+ * - `JD9165`, `JD9365`
+ * - `NV3022B`
+ * - `SH8601`
+ * - `SPD2010`
+ * - `ST7262`, `ST7701`, `ST7703`, `ST7789`, `ST7796`, `ST77903`, `ST77916`, `ST77922`
  */
 #define ESP_PANEL_BOARD_LCD_CONTROLLER      ST7262
 
 /**
  * @brief LCD bus type selection
+ *
+ * Supported bus types:
+ * - `ESP_PANEL_BUS_TYPE_SPI`
+ * - `ESP_PANEL_BUS_TYPE_QSPI`
+ * - `ESP_PANEL_BUS_TYPE_RGB` (ESP32-S3 only)
+ * - `ESP_PANEL_BUS_TYPE_MIPI_DSI` (ESP32-P4 only)
  */
 #define ESP_PANEL_BOARD_LCD_BUS_TYPE        (ESP_PANEL_BUS_TYPE_RGB)
 
@@ -92,23 +99,14 @@
     #define ESP_PANEL_BOARD_LCD_RGB_USE_CONTROL_PANEL       (0) // 0/1. Typically set to 1
 
     /* For refresh panel (RGB) */
-#if ESP_PANEL_USE_1024_600_LCD
-    #define ESP_PANEL_BOARD_LCD_RGB_CLK_HZ            (21 * 1000 * 1000)
-    #define ESP_PANEL_BOARD_LCD_RGB_HPW               (30)
-    #define ESP_PANEL_BOARD_LCD_RGB_HBP               (145)
-    #define ESP_PANEL_BOARD_LCD_RGB_HFP               (170)
-    #define ESP_PANEL_BOARD_LCD_RGB_VPW               (2)
-    #define ESP_PANEL_BOARD_LCD_RGB_VBP               (23)
-    #define ESP_PANEL_BOARD_LCD_RGB_VFP               (12)
-#else
-    #define ESP_PANEL_BOARD_LCD_RGB_CLK_HZ            (16 * 1000 * 1000)
-    #define ESP_PANEL_BOARD_LCD_RGB_HPW               (4)
-    #define ESP_PANEL_BOARD_LCD_RGB_HBP               (8)
-    #define ESP_PANEL_BOARD_LCD_RGB_HFP               (8)
-    #define ESP_PANEL_BOARD_LCD_RGB_VPW               (4)
-    #define ESP_PANEL_BOARD_LCD_RGB_VBP               (16)
-    #define ESP_PANEL_BOARD_LCD_RGB_VFP               (16)
-#endif
+    #define ESP_PANEL_BOARD_LCD_RGB_CLK_HZ          (21 * 1000 * 1000)
+                                                            // To increase the upper limit of the PCLK, see: https://docs.espressif.com/projects/esp-faq/en/latest/software-framework/peripherals/lcd.html#how-can-i-increase-the-upper-limit-of-pclk-settings-on-esp32-s3-while-ensuring-normal-rgb-screen-display
+    #define ESP_PANEL_BOARD_LCD_RGB_HPW             (30)
+    #define ESP_PANEL_BOARD_LCD_RGB_HBP             (145)
+    #define ESP_PANEL_BOARD_LCD_RGB_HFP             (170)
+    #define ESP_PANEL_BOARD_LCD_RGB_VPW             (2)
+    #define ESP_PANEL_BOARD_LCD_RGB_VBP             (23)
+    #define ESP_PANEL_BOARD_LCD_RGB_VFP             (12)
 
     #define ESP_PANEL_BOARD_LCD_RGB_PCLK_ACTIVE_NEG (1)     // 0: rising edge, 1: falling edge. Typically set to 0
                                                                                         // The following sheet shows the valid combinations of
@@ -192,11 +190,24 @@
  *
  * Set to `1` to enable touch panel support, `0` to disable
  */
-#define ESP_PANEL_BOARD_USE_TOUCH               (ESP_OPEN_TOUCH)
+#define ESP_PANEL_BOARD_USE_TOUCH               (0)
 
 #if ESP_PANEL_BOARD_USE_TOUCH
 /**
  * @brief Touch controller selection
+ *
+ * Supported controllers:
+ * - `AXS15231B`
+ * - `CHSC6540`
+ * - `CST816S`
+ * - `CST820`
+ * - `FT5x06`
+ * - `GT911`, `GT1151`
+ * - `SPD2010`
+ * - `ST1633`, `ST7123`
+ * - `STMPE610`
+ * - `TT21100`
+ * - `XPT2046`
  */
 #define ESP_PANEL_BOARD_TOUCH_CONTROLLER        GT911
 
@@ -423,9 +434,9 @@
  * 3. Patch version mismatch: No impact on functionality
  */
 #define ESP_PANEL_BOARD_CUSTOM_FILE_VERSION_MAJOR 1
-#define ESP_PANEL_BOARD_CUSTOM_FILE_VERSION_MINOR 0
+#define ESP_PANEL_BOARD_CUSTOM_FILE_VERSION_MINOR 2
 #define ESP_PANEL_BOARD_CUSTOM_FILE_VERSION_PATCH 0
 
-#endif // ESP_PANEL_BOARD_USE_CUSTOM
+#endif // ESP_PANEL_BOARD_DEFAULT_USE_CUSTOM
 
 // *INDENT-ON*
