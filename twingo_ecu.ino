@@ -9,27 +9,23 @@
 using namespace esp_panel::drivers;
 using namespace esp_panel::board;
 
-// I2C Pin define
-#define EXPANDER_I2C_ADDR (ESP_IO_EXPANDER_I2C_CH422G_ADDRESS)
-#define EXPANDER_I2C_SDA_PIN 8         // I2C data line pins
-#define EXPANDER_I2C_SCL_PIN 9         // I2C clock line pin
-#define EXPANDER_DI0 0                 // Digital Input 0
-#define EXPANDER_DI0_mask 1ULL << DI0  // Mask for Digital Input 0
+#define DI0 0
+#define DI1 5
 
-static const lv_color_t BACKGROUND_COLOR = lv_color_black();
-static const lv_color_t PRIMARY_COLOR = lv_color_hex(0x932348);
-static const byte IGNITION_INTERRUPT_PIN = EXPANDER_DI0;
+const lv_color_t BACKGROUND_COLOR = lv_color_black();
+const lv_color_t PRIMARY_COLOR = lv_color_hex(0x932348);
 
-static esp_expander::CH422G *expander = NULL;
-static lv_obj_t *img;
-static lv_obj_t *meter;
-static lv_meter_indicator_t *indic;
+esp_expander::CH422G *expander = NULL;
+lv_obj_t *img;
+lv_obj_t *meter;
+lv_meter_indicator_t *indic;
 
-static int ignition_counter = 0;
-static int last_ignition_status = LOW;
-static long last_time_ms = 0;
+int ignition_counter = 0;
+int last_ignition_status_0 = LOW;
+int last_ignition_status_1 = LOW;
+long last_time_ms = 0;
 
-static void meter_event_callback(lv_event_t *e) {
+void meter_event_callback(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
 
   if (code == LV_EVENT_DRAW_PART_BEGIN) {
@@ -123,31 +119,40 @@ void setup() {
   lvgl_port_unlock();
 
   Serial.println("Initialize IO expander");
-  expander = new esp_expander::CH422G(EXPANDER_I2C_SCL_PIN, EXPANDER_I2C_SDA_PIN, EXPANDER_I2C_ADDR);
-  expander->init();
-  expander->begin();
-  expander->pinMode(IGNITION_INTERRUPT_PIN, INPUT_PULLUP);
+
+  expander = static_cast<esp_expander::CH422G *>(board->getIO_Expander()->getBase());
+  expander->enableAllIO_Input();
+  expander->pinMode(DI0, INPUT);
+  expander->pinMode(DI1, INPUT);
 }
 
 void loop() {
-  int ignition_status = expander->digitalRead(IGNITION_INTERRUPT_PIN);
+  int ignition_status_0 = expander->digitalRead(DI0);
+  int ignition_status_1 = expander->digitalRead(DI1);
 
-  if (ignition_status != last_ignition_status) {
+  if (ignition_status_0 != last_ignition_status_0) {
     ignition_counter++;
-    last_ignition_status = ignition_status;
+    last_ignition_status_0 = ignition_status_0;
   }
 
-  if (millis() - last_time_ms > 300) {
+  if (ignition_status_1 != last_ignition_status_1) {
+    ignition_counter++;
+    last_ignition_status_1 = ignition_status_1;
+  }
+
+  int time_ms = millis() - last_time_ms;
+
+  if (time_ms >= 300) {
     last_time_ms = millis();
 
     int rpm = 0;
 
     if (ignition_counter > 0) {
-      rpm = ignition_counter * 60000 / 300;
+      rpm = ignition_counter * 60000 / time_ms / 8;
     }
     ignition_counter = 0;
 
     lv_meter_set_indicator_value(meter, indic, rpm);
-    Serial.print("RPM: " + String(rpm));
+    Serial.print("\nRPM: " + String(rpm));
   }
 }
