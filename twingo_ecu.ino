@@ -87,13 +87,14 @@ void setup() {
   meter = lv_meter_create(lv_scr_act());
 
   lv_obj_add_event_cb(meter, meter_event_callback, LV_EVENT_DRAW_PART_BEGIN, NULL);
-
   lv_obj_align(meter, LV_ALIGN_CENTER, 0, 210);
   lv_obj_set_size(meter, 940, 940);
-  lv_obj_set_style_bg_opa(meter, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_color(meter, BACKGROUND_COLOR, LV_PART_MAIN);
   lv_obj_set_style_pad_all(meter, 0, LV_PART_MAIN);
 
-  // Add a scale first
+  // Remove the circle from the middle
+  lv_obj_remove_style(meter, NULL, LV_PART_INDICATOR);
+
   lv_meter_scale_t *scale = lv_meter_add_scale(meter);
 
   lv_meter_set_scale_range(meter, scale, 0, 7000, 190, 175);
@@ -102,18 +103,8 @@ void setup() {
   lv_obj_set_style_text_font(meter, &lv_font_montserrat_48, LV_PART_MAIN);
   lv_obj_set_style_text_color(meter, lv_color_white(), 0);
 
-  // Add a red arc to the end
+  // Add arc indicator
   indic = lv_meter_add_arc(meter, scale, 40, PRIMARY_COLOR, 0);
-  lv_meter_set_indicator_start_value(meter, indic, 6000);
-  lv_meter_set_indicator_end_value(meter, indic, 7000);
-
-  // Make the tick lines red at the end of the scale
-  indic = lv_meter_add_scale_lines(meter, scale, PRIMARY_COLOR, PRIMARY_COLOR, false, 0);
-  lv_meter_set_indicator_start_value(meter, indic, 6000);
-  lv_meter_set_indicator_end_value(meter, indic, 7000);
-
-  // Add a needle line indicator
-  indic = lv_meter_add_needle_line(meter, scale, 14, PRIMARY_COLOR, -60);
 
   // Release the mutex
   lvgl_port_unlock();
