@@ -14,6 +14,12 @@ using namespace esp_panel::board;
 
 const lv_color_t BACKGROUND_COLOR = lv_color_black();
 const lv_color_t PRIMARY_COLOR = lv_color_hex(0x932348);
+const lv_color_t SECONDARY_COLOR = lv_palette_main(LV_PALETTE_GREY);
+
+const int INDICATOR_WIDTH = 50;
+const int MAJOR_TICK_WIDTH = 14;
+const int MINOR_TICK_WIDTH = 4;
+
 
 esp_expander::CH422G *expander = NULL;
 lv_obj_t *img;
@@ -76,35 +82,47 @@ void setup() {
   lv_obj_set_style_bg_color(lv_scr_act(), BACKGROUND_COLOR, LV_PART_MAIN);
   lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);
 
-  // Add twingo logo
-  LV_IMG_DECLARE(twingo_logo)
-  img = lv_img_create(lv_scr_act());
-  lv_img_set_src(img, &twingo_logo);
-  lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
-  lv_obj_set_style_img_recolor(img, lv_palette_main(LV_PALETTE_GREY), 0);
-  lv_obj_align(img, LV_ALIGN_CENTER, 0, 50);
-
   meter = lv_meter_create(lv_scr_act());
+
+  // Remove outside circle and padding
+  lv_obj_remove_style(meter, NULL, LV_PART_MAIN);
+
+  // Remove the circle from the middle
+  lv_obj_remove_style(meter, NULL, LV_PART_INDICATOR);
 
   lv_obj_add_event_cb(meter, meter_event_callback, LV_EVENT_DRAW_PART_BEGIN, NULL);
   lv_obj_align(meter, LV_ALIGN_CENTER, 0, 210);
   lv_obj_set_size(meter, 940, 940);
   lv_obj_set_style_bg_color(meter, BACKGROUND_COLOR, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(meter, 0, LV_PART_MAIN);
-
-  // Remove the circle from the middle
-  lv_obj_remove_style(meter, NULL, LV_PART_INDICATOR);
 
   lv_meter_scale_t *scale = lv_meter_add_scale(meter);
 
-  lv_meter_set_scale_range(meter, scale, 0, 7000, 190, 175);
-  lv_meter_set_scale_ticks(meter, scale, 36, 4, 40, lv_palette_main(LV_PALETTE_GREY));
-  lv_meter_set_scale_major_ticks(meter, scale, 5, 14, 40, lv_color_white(), 40);
+  lv_meter_set_scale_range(meter, scale, 0, 6000, 190, 175);
+  lv_meter_set_scale_ticks(meter, scale, 31, MINOR_TICK_WIDTH, INDICATOR_WIDTH + MINOR_TICK_WIDTH * 2, SECONDARY_COLOR);
+  lv_meter_set_scale_major_ticks(meter, scale, 5, MAJOR_TICK_WIDTH, INDICATOR_WIDTH + MINOR_TICK_WIDTH * 2, SECONDARY_COLOR, 40);
   lv_obj_set_style_text_font(meter, &lv_font_montserrat_48, LV_PART_MAIN);
-  lv_obj_set_style_text_color(meter, lv_color_white(), 0);
+  lv_obj_set_style_text_color(meter, SECONDARY_COLOR, 0);
 
-  // Add arc indicator
-  indic = lv_meter_add_arc(meter, scale, 40, PRIMARY_COLOR, 0);
+  // Add arc indicators
+  indic = lv_meter_add_arc(meter, scale, INDICATOR_WIDTH + MINOR_TICK_WIDTH * 2, PRIMARY_COLOR, 0);
+
+  lv_meter_indicator_t *indic2 = lv_meter_add_arc(meter, scale, MINOR_TICK_WIDTH, SECONDARY_COLOR, 0);
+
+  lv_meter_set_indicator_start_value(meter, indic2, 0);
+  lv_meter_set_indicator_end_value(meter, indic2, 6000);
+
+  lv_meter_indicator_t *indic3 = lv_meter_add_arc(meter, scale, MINOR_TICK_WIDTH, SECONDARY_COLOR, -INDICATOR_WIDTH - MINOR_TICK_WIDTH);
+
+  lv_meter_set_indicator_start_value(meter, indic3, 0);
+  lv_meter_set_indicator_end_value(meter, indic3, 6000);
+
+  // Add twingo logo
+  LV_IMG_DECLARE(twingo_logo)
+  img = lv_img_create(meter);
+  lv_img_set_src(img, &twingo_logo);
+  lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
+  lv_obj_set_style_img_recolor(img, SECONDARY_COLOR, 0);
+  lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
 
   // Release the mutex
   lvgl_port_unlock();
@@ -143,7 +161,7 @@ void loop() {
     }
     ignition_counter = 0;
 
-    lv_meter_set_indicator_value(meter, indic, rpm);
+    lv_meter_set_indicator_end_value(meter, indic, rpm);
     Serial.print("\nRPM: " + String(rpm));
   }
 }

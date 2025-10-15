@@ -15,7 +15,7 @@
 // *INDENT-OFF*
 
 // Custom config
-#define CONFIG_LVGL_PORT_AVOID_TEARING_MODE     (2)
+#define CONFIG_LVGL_PORT_AVOID_TEARING_MODE     (3)
 
 /**
  * LVGL related parameters, can be adjusted by users
