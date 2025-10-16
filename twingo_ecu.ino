@@ -16,10 +16,11 @@ const lv_color_t BACKGROUND_COLOR = lv_color_black();
 const lv_color_t PRIMARY_COLOR = lv_color_hex(0x932348);
 const lv_color_t SECONDARY_COLOR = lv_palette_main(LV_PALETTE_GREY);
 
-const int INDICATOR_WIDTH = 50;
+const int INDICATOR_WIDTH = 60;
 const int MAJOR_TICK_WIDTH = 14;
 const int MINOR_TICK_WIDTH = 4;
 
+const byte NUM_RPM_READINGS = 2;
 
 esp_expander::CH422G *expander = NULL;
 lv_obj_t *img;
@@ -30,6 +31,11 @@ int ignition_counter = 0;
 int last_ignition_status_0 = LOW;
 int last_ignition_status_1 = LOW;
 long last_time_ms = 0;
+
+unsigned int rpm_readings[NUM_RPM_READINGS];
+unsigned int rpm_read_index;
+unsigned int rpm_total;
+unsigned int rpm_average;
 
 void meter_event_callback(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
@@ -124,6 +130,8 @@ void setup() {
   lv_obj_set_style_img_recolor(img, SECONDARY_COLOR, 0);
   lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
 
+  // lv_meter_set_indicator_end_value(meter, indic, 1000);
+
   // Release the mutex
   lvgl_port_unlock();
 
@@ -151,7 +159,7 @@ void loop() {
 
   int time_ms = millis() - last_time_ms;
 
-  if (time_ms >= 300) {
+  if (time_ms >= 200) {
     last_time_ms = millis();
 
     int rpm = 0;
@@ -161,7 +169,22 @@ void loop() {
     }
     ignition_counter = 0;
 
-    lv_meter_set_indicator_end_value(meter, indic, rpm);
-    Serial.print("\nRPM: " + String(rpm));
+    // Smoothing
+    rpm_total = rpm_total - rpm_readings[rpm_read_index];
+    rpm_readings[rpm_read_index] = rpm;
+    rpm_total = rpm_total + rpm_readings[rpm_read_index];
+    rpm_read_index++;
+
+    if (rpm_read_index >= NUM_RPM_READINGS) {
+      rpm_read_index = 0;
+    }
+
+    rpm_average = rpm_total / NUM_RPM_READINGS;
+
+    lvgl_port_lock(-1);
+    lv_meter_set_indicator_end_value(meter, indic, rpm_average);
+    lvgl_port_unlock();
+
+    Serial.print("\nRPM: " + String(rpm_average));
   }
 }
