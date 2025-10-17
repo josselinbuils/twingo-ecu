@@ -12,9 +12,9 @@ using namespace esp_panel::board;
 #define DI0 0
 #define DI1 5
 
-const lv_color_t BACKGROUND_COLOR = lv_color_black();
-const lv_color_t PRIMARY_COLOR = lv_color_hex(0x932348);
-const lv_color_t SECONDARY_COLOR = lv_palette_main(LV_PALETTE_GREY);
+const lv_color_t BACKGROUND_COLOR = lv_color_hex(0x101200);
+const lv_color_t PRIMARY_COLOR = lv_color_hex(0xa4b700);
+const lv_color_t SECONDARY_COLOR = lv_color_hex(0xa4b700);
 
 const int INDICATOR_WIDTH = 60;
 const int MAJOR_TICK_WIDTH = 14;
@@ -27,17 +27,17 @@ lv_obj_t *img;
 lv_obj_t *meter;
 lv_meter_indicator_t *indic;
 
-int ignition_counter = 0;
-int last_ignition_status_0 = LOW;
-int last_ignition_status_1 = LOW;
-long last_time_ms = 0;
+int ignitionCounter = 0;
+int lastIgnitionStatus0 = LOW;
+int lastIgnitionStatus1 = LOW;
+long lastTimeMs = 0;
 
-unsigned int rpm_readings[NUM_RPM_READINGS];
-unsigned int rpm_read_index;
-unsigned int rpm_total;
-unsigned int rpm_average;
+unsigned int rpmReadings[NUM_RPM_READINGS];
+unsigned int readIndex;
+unsigned int rpmTotal;
+unsigned int rpmAverage;
 
-void meter_event_callback(lv_event_t *e) {
+void meterEventCallback(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
 
   if (code == LV_EVENT_DRAW_PART_BEGIN) {
@@ -96,7 +96,7 @@ void setup() {
   // Remove the circle from the middle
   lv_obj_remove_style(meter, NULL, LV_PART_INDICATOR);
 
-  lv_obj_add_event_cb(meter, meter_event_callback, LV_EVENT_DRAW_PART_BEGIN, NULL);
+  lv_obj_add_event_cb(meter, meterEventCallback, LV_EVENT_DRAW_PART_BEGIN, NULL);
   lv_obj_align(meter, LV_ALIGN_CENTER, 0, 210);
   lv_obj_set_size(meter, 940, 940);
   lv_obj_set_style_bg_color(meter, BACKGROUND_COLOR, LV_PART_MAIN);
@@ -123,9 +123,9 @@ void setup() {
   lv_meter_set_indicator_end_value(meter, indic3, 6000);
 
   // Add twingo logo
-  LV_IMG_DECLARE(twingo_logo)
+  LV_IMG_DECLARE(twingoLogo)
   img = lv_img_create(meter);
-  lv_img_set_src(img, &twingo_logo);
+  lv_img_set_src(img, &twingoLogo);
   lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
   lv_obj_set_style_img_recolor(img, SECONDARY_COLOR, 0);
   lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
@@ -147,44 +147,44 @@ void loop() {
   int ignition_status_0 = expander->digitalRead(DI0);
   int ignition_status_1 = expander->digitalRead(DI1);
 
-  if (ignition_status_0 != last_ignition_status_0) {
-    ignition_counter++;
-    last_ignition_status_0 = ignition_status_0;
+  if (ignition_status_0 != lastIgnitionStatus0) {
+    ignitionCounter++;
+    lastIgnitionStatus0 = ignition_status_0;
   }
 
-  if (ignition_status_1 != last_ignition_status_1) {
-    ignition_counter++;
-    last_ignition_status_1 = ignition_status_1;
+  if (ignition_status_1 != lastIgnitionStatus1) {
+    ignitionCounter++;
+    lastIgnitionStatus1 = ignition_status_1;
   }
 
-  int time_ms = millis() - last_time_ms;
+  int time_ms = millis() - lastTimeMs;
 
   if (time_ms >= 200) {
-    last_time_ms = millis();
+    lastTimeMs = millis();
 
     int rpm = 0;
 
-    if (ignition_counter > 0) {
-      rpm = ignition_counter * 60000 / time_ms / 8;
+    if (ignitionCounter > 0) {
+      rpm = ignitionCounter * 60000 / time_ms / 8;
     }
-    ignition_counter = 0;
+    ignitionCounter = 0;
 
     // Smoothing
-    rpm_total = rpm_total - rpm_readings[rpm_read_index];
-    rpm_readings[rpm_read_index] = rpm;
-    rpm_total = rpm_total + rpm_readings[rpm_read_index];
-    rpm_read_index++;
+    rpmTotal = rpmTotal - rpmReadings[readIndex];
+    rpmReadings[readIndex] = rpm;
+    rpmTotal = rpmTotal + rpmReadings[readIndex];
+    readIndex++;
 
-    if (rpm_read_index >= NUM_RPM_READINGS) {
-      rpm_read_index = 0;
+    if (readIndex >= NUM_RPM_READINGS) {
+      readIndex = 0;
     }
 
-    rpm_average = rpm_total / NUM_RPM_READINGS;
+    rpmAverage = rpmTotal / NUM_RPM_READINGS;
 
     lvgl_port_lock(-1);
-    lv_meter_set_indicator_end_value(meter, indic, rpm_average);
+    lv_meter_set_indicator_end_value(meter, indic, rpmAverage);
     lvgl_port_unlock();
 
-    Serial.print("\nRPM: " + String(rpm_average));
+    Serial.print("\nRPM: " + String(rpmAverage));
   }
 }

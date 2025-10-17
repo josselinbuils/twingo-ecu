@@ -8,7 +8,7 @@
 #define LV_ATTRIBUTE_IMG_TWINGO_LOGO
 #endif
 
-const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_TWINGO_LOGO uint8_t twingo_logo_map[] = {
+const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_TWINGO_LOGO uint8_t twingoLogoMap[] = {
   0x00,
   0x00,
   0x00,
@@ -5975,12 +5975,12 @@ const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_TWINGO_LO
   0x00,
 };
 
-const lv_img_dsc_t twingo_logo = {
+const lv_img_dsc_t twingoLogo = {
   { LV_IMG_CF_ALPHA_1BIT,
     0,
     0,
     330,
     142 },
   5964,
-  twingo_logo_map,
+  twingoLogoMap,
 };
