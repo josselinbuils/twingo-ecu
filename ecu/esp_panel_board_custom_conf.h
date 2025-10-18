@@ -17,6 +17,9 @@
 
 // *INDENT-OFF*
 
+// Speed up build
+#define ESP_UTILS_CONF_LOG_LEVEL               ESP_UTILS_LOG_LEVEL_NONE
+
 /**
  * @brief Flag to enable custom board configuration (0/1)
  *

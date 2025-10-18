@@ -57,8 +57,6 @@ void meterEventCallback(lv_event_t *e) {
 }
 
 void setup() {
-  String title = "LVGL porting example";
-
   Serial.begin(115200);
 
   Serial.println("Initializing board");
