@@ -6,10 +6,12 @@
 
 #include <Wire.h>
 
-const byte INTERRUPT_PIN_1 = 2;
-const byte INTERRUPT_PIN_2 = 3;
+const int INTERRUPT_PIN_1 = 2;
+const int INTERRUPT_PIN_2 = 3;
 
-const byte PULSES_PER_REVOLUTION = 2;  // Set how many pulses there are on each revolution on sensor 1. Default: 2.
+const int I2C_ADDRESS = 1;
+
+const int PULSES_PER_REVOLUTION = 2;  // Set how many pulses there are on each revolution on sensor 1. Default: 2.
 
 // If the period between pulses is too high, or even if the pulses stopped, then we would get stuck showing the
 // last value instead of a 0. Because of this we are going to set a limit for the maximum period allowed.
@@ -21,8 +23,8 @@ const byte PULSES_PER_REVOLUTION = 2;  // Set how many pulses there are on each 
 const unsigned long ZERO_TIMEOUT = 100000;  // For high response time, a good value would be 100000.
                                             // For reading very low rpm, a good value would be 300000.
 
-const byte NUM_RPM_READINGS = 2;  // Number of samples for smoothing. The higher, the more smoothing, but it's going to
-                                  // react slower to changes. 1 = no smoothing. Default: 2.
+const int NUM_RPM_READINGS = 2;  // Number of samples for smoothing. The higher, the more smoothing, but it's going to
+                                 // react slower to changes. 1 = no smoothing. Default: 2.
 
 
 // Sensors
@@ -67,11 +69,11 @@ unsigned int zeroDebouncingExtras[2];  // Stores the extra value added to the ZE
 
 // Smoothing
 
-unsigned long rpmReadings[2][NUM_RPM_READINGS];  // The inputs.
-unsigned long readIndexes[2];                    // The indexes of the current reading.
-unsigned long rpmTotals[2];                      // The running total.
-unsigned long rpmAverages[2];                    // The rpm values after applying the smoothing.
-volatile unsigned long rpmAverage;               // The average rpm value between sensors.
+unsigned int rpmReadings[2][NUM_RPM_READINGS];  // The inputs.
+unsigned int readIndexes[2];                    // The indexes of the current reading.
+unsigned int rpmTotals[2];                      // The running total.
+unsigned int rpmAverages[2];                    // The rpm values after applying the smoothing.
+volatile unsigned int rpmAverage;               // The average rpm value between sensors.
 
 void setup() {
   Serial.begin(9600);
@@ -79,8 +81,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_1), handleInterrupt1, RISING);  // Enable interruption pin 2 when going from LOW to HIGH.
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_2), handleInterrupt2, RISING);  // Enable interruption pin 3 when going from LOW to HIGH.
 
-  Wire.begin(1);                      // Join I2C bus with address #1
-  Wire.onRequest(i2cRequestHandler);  // register event
+  Wire.begin(I2C_ADDRESS);
+  Wire.onRequest(i2cRequestHandler);
 
   delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings
                 // stored we need a high enough value in micros() so if divided is not going to give negative values.
