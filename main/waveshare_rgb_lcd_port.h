@@ -35,12 +35,10 @@
   #define LCD_PIXEL_CLOCK_HZ (16 * 1000 * 1000)
 #endif
 
-#define LCD_RGB_BOUNCE_BUFFER_HEIGHT \
-  10 // Height of bounce buffer. The width of the buffer is the same as that of the LCD.
 #define LCD_BIT_PER_PIXEL (16)
 #define RGB_BIT_PER_PIXEL (16)
 #define RGB_DATA_WIDTH (16)
-#define RGB_BOUNCE_BUFFER_SIZE (LCD_H_RES * LCD_RGB_BOUNCE_BUFFER_HEIGHT)
+#define RGB_BOUNCE_BUFFER_SIZE (LCD_H_RES * CONFIG_LCD_RGB_BOUNCE_BUFFER_HEIGHT)
 #define LCD_IO_RGB_DISP (-1) // -1 if not used
 #define LCD_IO_RGB_VSYNC (GPIO_NUM_3)
 #define LCD_IO_RGB_HSYNC (GPIO_NUM_46)
@@ -74,6 +72,7 @@
 static const char *TAG = "TwingoECU";
 
 esp_err_t waveshare_esp32_s3_rgb_lcd_init();
+
 esp_err_t wavesahre_rgb_lcd_bl_on();
 esp_err_t wavesahre_rgb_lcd_bl_off();
 

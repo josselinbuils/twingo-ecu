@@ -13,6 +13,7 @@ IRAM_ATTR static bool rgb_lcd_on_vsync_event(
   return lvgl_port_notify_rgb_vsync();
 }
 
+#if CONFIG_LCD_TOUCH_CONTROLLER_GT911
 /**
  * @brief I2C master initialization
  */
@@ -35,7 +36,6 @@ static esp_err_t i2c_master_init(void) {
   return i2c_driver_install(i2c_master_port, i2c_conf.mode, 0, 0, 0);
 }
 
-#if LCD_TOUCH_CONTROLLER_GT911
 // GPIO initialization
 void gpio_init(void) {
   // Zero-initialize the config structure
@@ -57,8 +57,7 @@ void waveshare_esp32_s3_touch_reset() {
     I2C_MASTER_NUM, 0x24, &write_buf, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS
   );
 
-  // Reset the touch screen. It is recommended to reset the touch screen before
-  // using it.
+  // Reset the touch screen. It is recommended to reset the touch screen before using it.
   write_buf = 0x2C;
   i2c_master_write_to_device(
     I2C_MASTER_NUM, 0x38, &write_buf, 1, I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS
@@ -77,8 +76,9 @@ void waveshare_esp32_s3_touch_reset() {
 
 // Initialize RGB LCD
 esp_err_t waveshare_esp32_s3_rgb_lcd_init() {
-  ESP_LOGI(TAG, "Install RGB LCD panel driver"); // Log the start of the RGB LCD
-  // panel driver installation
+  ESP_LOGI(
+    TAG, "Install RGB LCD panel driver"
+  ); // Log the start of the RGB LCD panel driver installation
   esp_lcd_panel_handle_t panel_handle = NULL; // Declare a handle for the LCD panel
   esp_lcd_rgb_panel_config_t panel_config = {
     .clk_src = LCD_CLK_SRC_DEFAULT, // Set the clock source for the panel
@@ -145,14 +145,13 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init() {
   // Create a new RGB panel with the specified configuration
   ESP_ERROR_CHECK(esp_lcd_new_rgb_panel(&panel_config, &panel_handle));
 
-  ESP_LOGI(TAG, "Initialize RGB LCD panel"); // Log the initialization of the
-  // RGB LCD panel
+  ESP_LOGI(TAG, "Initialize RGB LCD panel"); // Log the initialization of the RGB LCD panel
   ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle)); // Initialize the LCD panel
 
   esp_lcd_touch_handle_t tp_handle = NULL; // Declare a handle for the touch panel
+#if CONFIG_LCD_TOUCH_CONTROLLER_GT911
   ESP_LOGI(TAG, "Initialize I2C bus"); // Log the initialization of the I2C bus
   i2c_master_init(); // Initialize the I2C master
-#if LCD_TOUCH_CONTROLLER_GT911
   ESP_LOGI(TAG, "Initialize GPIO"); // Log GPIO initialization
   gpio_init(); // Initialize GPIO pins
   ESP_LOGI(TAG, "Initialize Touch LCD"); // Log touch LCD initialization
@@ -160,18 +159,14 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init() {
 
   esp_lcd_panel_io_handle_t tp_io_handle = NULL; // Declare a handle for touch panel I/O
   const esp_lcd_panel_io_i2c_config_t tp_io_config =
-    ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG(); // Configure I2C for GT911 touch
-  // controller
+    ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG(); // Configure I2C for GT911 touch controller
 
   ESP_LOGI(TAG, "Initialize I2C panel IO"); // Log I2C panel I/O initialization
-  ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(
-    (esp_lcd_i2c_bus_handle_t)I2C_MASTER_NUM,
-    &tp_io_config,
-    &tp_io_handle
-  )); // Create new I2C panel I/O
+  ESP_ERROR_CHECK(
+    esp_lcd_new_panel_io_i2c((esp_lcd_i2c_bus_handle_t)I2C_MASTER_NUM, &tp_io_config, &tp_io_handle)
+  ); // Create new I2C panel I/O
 
-  ESP_LOGI(TAG, "Initialize touch controller GT911"); // Log touch controller
-  // initialization
+  ESP_LOGI(TAG, "Initialize touch controller GT911"); // Log touch controller initialization
   const esp_lcd_touch_config_t tp_cfg = {
     .x_max = LCD_H_RES, // Set maximum X coordinate
     .y_max = LCD_V_RES, // Set maximum Y coordinate
@@ -188,17 +183,14 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init() {
       .mirror_y = 0, // No mirroring of Y
     },
   };
-  ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt911(
-    tp_io_handle,
-    &tp_cfg,
-    &tp_handle
-  )); // Create new I2C GT911 touch controller
-#endif // LCD_TOUCH_CONTROLLER_GT911
+  ESP_ERROR_CHECK(
+    esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &tp_handle)
+  ); // Create new I2C GT911 touch controller
+#endif // CONFIG_LCD_TOUCH_CONTROLLER_GT911
 
-  ESP_ERROR_CHECK(lvgl_port_init(
-    panel_handle,
-    tp_handle
-  )); // Initialize LVGL with the panel and touch handles
+  ESP_ERROR_CHECK(
+    lvgl_port_init(panel_handle, tp_handle)
+  ); // Initialize LVGL with the panel and touch handles
 
   // Register callbacks for RGB panel events
   esp_lcd_rgb_panel_event_callbacks_t cbs = {
@@ -215,7 +207,7 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init() {
   return ESP_OK; // Return success
 }
 
-// Turn on the screen backlight
+/******************************* Turn on the screen backlight **************************************/
 esp_err_t wavesahre_rgb_lcd_bl_on() {
   // Configure CH422G to output mode
   uint8_t write_buf = 0x01;
@@ -231,7 +223,7 @@ esp_err_t wavesahre_rgb_lcd_bl_on() {
   return ESP_OK;
 }
 
-// Turn off the screen backlight
+/******************************* Turn off the screen backlight **************************************/
 esp_err_t wavesahre_rgb_lcd_bl_off() {
   // Configure CH422G to output mode
   uint8_t write_buf = 0x01;

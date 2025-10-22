@@ -16,27 +16,35 @@
 extern "C" {
 #endif
 
-#define LCD_TOUCH_CONTROLLER_GT911 0 // 1 initiates the touch, 0 closes the touch.
+#define ESP_PANEL_USE_1024_600_LCD (1) // 0: 800x480, 1: 1024x600
+#define CONFIG_LCD_TOUCH_CONTROLLER_GT911 1 // 1 initiates the touch, 0 closes the touch.
 
 /**
  * LVGL related parameters, can be adjusted by users
  *
  */
-#define LVGL_PORT_H_RES (1024)
-#define LVGL_PORT_V_RES (600)
-#define LVGL_PORT_TICK_PERIOD_MS 2
+#if ESP_PANEL_USE_1024_600_LCD
+  #define LVGL_PORT_H_RES (1024)
+  #define LVGL_PORT_V_RES (600)
+#else
+  #define LVGL_PORT_H_RES (800)
+  #define LVGL_PORT_V_RES (480)
+#endif
+#define LVGL_PORT_TICK_PERIOD_MS (CONFIG_LVGL_PORT_TICK)
 
 /**
  * LVGL timer handle task related parameters, can be adjusted by users
  *
  */
 #define LVGL_PORT_TASK_MAX_DELAY_MS \
-  (500) // The maximum delay of the LVGL timer task, in milliseconds
+  (CONFIG_LVGL_PORT_TASK_MAX_DELAY_MS) // The maximum delay of the LVGL timer task, in milliseconds
 #define LVGL_PORT_TASK_MIN_DELAY_MS \
-  (10) // The minimum delay of the LVGL timer task, in milliseconds
-#define LVGL_PORT_TASK_STACK_SIZE (6 * 1024) // The stack size of the LVGL timer task, in bytes
-#define LVGL_PORT_TASK_PRIORITY (2) // The priority of the LVGL timer task
-#define LVGL_PORT_TASK_CORE (-1) // The core of the LVGL timer task,
+  (CONFIG_LVGL_PORT_TASK_MIN_DELAY_MS) // The minimum delay of the LVGL timer task, in milliseconds
+#define LVGL_PORT_TASK_STACK_SIZE \
+  (CONFIG_LVGL_PORT_TASK_STACK_SIZE_KB * 1024) // The stack size of the LVGL timer task, in bytes
+#define LVGL_PORT_TASK_PRIORITY \
+  (CONFIG_LVGL_PORT_TASK_PRIORITY) // The priority of the LVGL timer task
+#define LVGL_PORT_TASK_CORE (CONFIG_LVGL_PORT_TASK_CORE) // The core of the LVGL timer task,
 // `-1` means the don't specify the core
 /**
  *
@@ -49,20 +57,18 @@ extern "C" {
  *      (The SRAM is faster than PSRAM, but the PSRAM has a larger capacity)
  *
  */
-#define LVGL_PORT_BUF_INTERNAL (1)
-#define LVGL_PORT_BUF_PSRAM (0)
-#if LVGL_PORT_BUF_PSRAM
+#if CONFIG_LVGL_PORT_BUF_PSRAM
   #define LVGL_PORT_BUFFER_MALLOC_CAPS (MALLOC_CAP_SPIRAM)
-#elif LVGL_PORT_BUF_INTERNAL
+#elif CONFIG_LVGL_PORT_BUF_INTERNAL
   #define LVGL_PORT_BUFFER_MALLOC_CAPS (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
 #endif
-#define LVGL_PORT_BUFFER_HEIGHT (100)
+#define LVGL_PORT_BUFFER_HEIGHT (CONFIG_LVGL_PORT_BUF_HEIGHT)
 
 /**
  * Avoid tering related configurations, can be adjusted by users.
  *
  */
-#define LVGL_PORT_AVOID_TEAR_ENABLE (0) // Set to 1 to enable
+#define LVGL_PORT_AVOID_TEAR_ENABLE (CONFIG_LVGL_PORT_AVOID_TEAR_ENABLE) // Set to 1 to enable
 #if LVGL_PORT_AVOID_TEAR_ENABLE
   /**
    * Set the avoid tearing mode:
@@ -72,11 +78,20 @@ extern "C" {
    *      - 3: LCD double-buffer & LVGL direct-mode (recommended)
    *
    */
-  #define LVGL_PORT_AVOID_TEAR_MODE (3)
+  #define LVGL_PORT_AVOID_TEAR_MODE (CONFIG_LVGL_PORT_AVOID_TEAR_MODE)
 
   /**
-   * Below configurations are automatically set according to the above
-   * configurations, users do not need to modify them.
+   * Set the rotation degree of the LCD panel when the avoid tearing function is enabled:
+   *      - 0: 0 degree
+   *      - 90: 90 degree
+   *      - 180: 180 degree
+   *      - 270: 270 degree
+   *
+   */
+  #define LVGL_PORT_ROTATION_DEGREE (CONFIG_LVGL_PORT_ROTATION_DEGREE)
+
+  /**
+   * Below configurations are automatically set according to the above configurations, users do not need to modify them.
    *
    */
   #if LVGL_PORT_AVOID_TEAR_MODE == 1
@@ -90,6 +105,21 @@ extern "C" {
     #define LVGL_PORT_DIRECT_MODE (1)
   #endif /* LVGL_PORT_AVOID_TEAR_MODE */
 
+  #if LVGL_PORT_ROTATION_DEGREE == 0
+    #define LVGL_PORT_ROTATION_0 (1)
+  #else
+    #if LVGL_PORT_ROTATION_DEGREE == 90
+      #define LVGL_PORT_ROTATION_90 (1)
+    #elif LVGL_PORT_ROTATION_DEGREE == 180
+      #define LVGL_PORT_ROTATION_180 (1)
+    #elif LVGL_PORT_ROTATION_DEGREE == 270
+      #define LVGL_PORT_ROTATION_270 (1)
+    #endif
+    #ifdef LVGL_PORT_LCD_RGB_BUFFER_NUMS
+      #undef LVGL_PORT_LCD_RGB_BUFFER_NUMS
+      #define LVGL_PORT_LCD_RGB_BUFFER_NUMS (3)
+    #endif
+  #endif /* LVGL_PORT_ROTATION_DEGREE */
 #else
   #define LVGL_PORT_LCD_RGB_BUFFER_NUMS (1)
   #define LVGL_PORT_FULL_REFRESH (0)
@@ -127,8 +157,7 @@ bool lvgl_port_lock(int timeout_ms);
 void lvgl_port_unlock(void);
 
 /**
- * @brief Notifies the LVGL task when the transmission of the RGB frame buffer
- * is completed.
+ * @brief Notifies the LVGL task when the transmission of the RGB frame buffer is completed.
  *
  * @return
  *      - true:  The tasks need to be re-scheduled
