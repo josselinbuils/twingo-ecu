@@ -88,8 +88,8 @@ void app_main() {
   lv_color_t COLOR = lv_color_hex(0xa4b700);
 
   waveshare_esp32_s3_rgb_lcd_init(); // Initialize the Waveshare ESP32-S3 RGB LCD
-  // wavesahre_rgb_lcd_bl_on();  //Turn on the screen backlight
-  // wavesahre_rgb_lcd_bl_off(); //Turn off the screen backlight
+  // waveshare_rgb_lcd_bl_on();  //Turn on the screen backlight
+  // waveshare_rgb_lcd_bl_off(); //Turn off the screen backlight
 
   if (lvgl_port_lock(-1)) {
     lv_obj_set_style_bg_color(lv_scr_act(), BACKGROUND_COLOR, LV_PART_MAIN);

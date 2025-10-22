@@ -208,7 +208,7 @@ esp_err_t waveshare_esp32_s3_rgb_lcd_init() {
 }
 
 /******************************* Turn on the screen backlight **************************************/
-esp_err_t wavesahre_rgb_lcd_bl_on() {
+esp_err_t waveshare_rgb_lcd_bl_on() {
   // Configure CH422G to output mode
   uint8_t write_buf = 0x01;
   i2c_master_write_to_device(
@@ -224,7 +224,7 @@ esp_err_t wavesahre_rgb_lcd_bl_on() {
 }
 
 /******************************* Turn off the screen backlight **************************************/
-esp_err_t wavesahre_rgb_lcd_bl_off() {
+esp_err_t waveshare_rgb_lcd_bl_off() {
   // Configure CH422G to output mode
   uint8_t write_buf = 0x01;
   i2c_master_write_to_device(
