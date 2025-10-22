@@ -87,8 +87,7 @@ void app_main() {
   lv_color_t BACKGROUND_COLOR = lv_color_hex(0x101200);
   lv_color_t COLOR = lv_color_hex(0xa4b700);
 
-  waveshare_esp32_s3_rgb_lcd_init(); // Initialize the Waveshare ESP32-S3 RGB
-  // LCD
+  waveshare_esp32_s3_rgb_lcd_init(); // Initialize the Waveshare ESP32-S3 RGB LCD
   // wavesahre_rgb_lcd_bl_on();  //Turn on the screen backlight
   // wavesahre_rgb_lcd_bl_off(); //Turn off the screen backlight
 
@@ -97,6 +96,8 @@ void app_main() {
     lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);
 
     meter = lv_meter_create(lv_scr_act());
+
+    lv_obj_clear_flag(meter, LV_OBJ_FLAG_SCROLLABLE);
 
     // Remove outside circle, padding, and circle from the middle
     lv_obj_remove_style(meter, NULL, LV_PART_MAIN);
