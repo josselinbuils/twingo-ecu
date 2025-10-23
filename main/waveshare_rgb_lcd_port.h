@@ -69,8 +69,6 @@
 #define PIN_NUM_TOUCH_RST (-1) // -1 if not used
 #define PIN_NUM_TOUCH_INT (-1) // -1 if not used
 
-static const char *TAG = "TwingoECU";
-
 esp_err_t waveshare_esp32_s3_rgb_lcd_init();
 
 esp_err_t waveshare_rgb_lcd_bl_on();

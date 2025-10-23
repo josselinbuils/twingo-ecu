@@ -23,7 +23,8 @@
 			"esp_mac.h": "c",
 			"esp_lcd_panel_ops.h": "c",
 			"task.h": "c",
-			"lv_demo_music.h": "c"
+			"lv_demo_music.h": "c",
+			"queue.h": "c"
 		}
 	}
 }

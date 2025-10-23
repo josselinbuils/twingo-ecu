@@ -15,7 +15,8 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
-static const char *TAG = "lv_port"; // Tag for logging
+#define TAG "LVGL"
+
 static SemaphoreHandle_t lvgl_mux; // LVGL mutex for synchronization
 static TaskHandle_t lvgl_task_handle = NULL; // Handle for the LVGL task
 

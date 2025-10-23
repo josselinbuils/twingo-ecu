@@ -1,7 +1,10 @@
 #include "twingo_logo.c"
 #include "waveshare_rgb_lcd_port.h"
+#include "waveshare_twai_port.h"
 #include <driver/i2c.h>
 #include <lvgl.h>
+
+#define TAG "ECU"
 
 #define ACK_CHECK_EN 0x1
 #define ACK_VAL 0x0
@@ -188,11 +191,14 @@ void app_main() {
     lvgl_port_unlock();
   }
 
+  // ESP_LOGI(TAG, "Initialize CAN bus");
+  // ESP_ERROR_CHECK(waveshare_twai_init());
+
   while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
-    printf("Wait for tachometer device...\n");
+    ESP_LOGI(TAG, "Wait for tachometer device...");
     vTaskDelay(500 / portTICK_PERIOD_MS);
   }
-  printf("Tachometer device found!\n");
+  ESP_LOGI(TAG, "Tachometer device found!");
 
   while (true) {
     int ret;
@@ -200,16 +206,16 @@ void app_main() {
     ret = i2c_master_read_slave(I2C_NUM_0, (uint8_t *)buffer, 2);
 
     if (ret == ESP_ERR_TIMEOUT) {
-      printf("I2C Timeout\n");
+      ESP_LOGW(TAG, "I2C Timeout\n");
     } else if (ret == ESP_OK) {
       if (lvgl_port_lock(-1)) {
         uint16_t rpm = buffer[0] | (buffer[1] << 8);
         lv_meter_set_indicator_end_value(meter, indic, rpm);
         lvgl_port_unlock();
-        // printf("rpm: %d\n", rpm);
+        // ESP_LOGI(TAG, "rpm: %d\n", rpm);
       }
     } else {
-      printf("Master read slave error, IO not connected...\n");
+      ESP_LOGI(TAG, "Master read slave error, IO not connected...\n");
     }
   }
 }

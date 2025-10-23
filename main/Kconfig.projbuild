@@ -114,4 +114,20 @@ menu "Configuration"
             help
                 Height of LVGL buffer. The width of the buffer is the same as that of the LCD.
     endmenu
+
+    config RX_GPIO_NUM
+        int "RX GPIO number"
+        default 22 if IDF_TARGET_ESP32
+        default 2
+        help
+            This option selects the GPIO pin used for the RX signal. Connect the
+            RX signal to your transceiver.
+
+    config TX_GPIO_NUM
+        int "TX GPIO number"
+        default 21 if IDF_TARGET_ESP32
+        default 0
+        help
+            This option selects the GPIO pin used for the TX signal. Connect the
+            TX signal to your transceiver.
 endmenu
