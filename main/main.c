@@ -3,8 +3,6 @@
 #include <driver/i2c.h>
 #include <lvgl.h>
 
-#define NUM_RPM_READINGS 2
-
 #define ACK_CHECK_EN 0x1
 #define ACK_VAL 0x0
 #define NACK_VAL 0x1
@@ -20,16 +18,6 @@ const int PADDING = 14;
 lv_obj_t *img;
 lv_obj_t *meter;
 lv_meter_indicator_t *indic;
-
-int ignitionCounter = 0;
-int lastIgnitionStatus0 = 0;
-int lastIgnitionStatus1 = 0;
-long lastTimeMs = 0;
-
-unsigned int rpmReadings[NUM_RPM_READINGS];
-unsigned int readIndex;
-unsigned int rpmTotal;
-unsigned int rpmAverage;
 
 void meterEventCallback(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
