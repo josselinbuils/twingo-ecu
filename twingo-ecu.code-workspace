@@ -1,0 +1,29 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"waveshare_rgb_lcd_port.h": "c",
+			"esp_lcd_touch.h": "c",
+			"lvgl_port.h": "c",
+			"esp_lcd_touch_gt911.h": "c",
+			"lvgl.h": "c",
+			"freertos.h": "c",
+			"esp_timer.h": "c",
+			"esp_log.h": "c",
+			"esp_lcd_panel_rgb.h": "c",
+			"esp_lcd_panel_io.h": "c",
+			"semphr.h": "c",
+			"gpio.h": "c",
+			"esp_err.h": "c",
+			"i2c.h": "c",
+			"esp_mac.h": "c",
+			"esp_lcd_panel_ops.h": "c",
+			"task.h": "c",
+			"lv_demo_music.h": "c"
+		}
+	}
+}
