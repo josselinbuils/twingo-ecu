@@ -79,6 +79,8 @@ void app_main() {
   // waveshare_rgb_lcd_bl_on();  //Turn on the screen backlight
   // waveshare_rgb_lcd_bl_off(); //Turn off the screen backlight
 
+  vTaskDelay(1); // Prevent LVGL slow boot
+
   if (lvgl_port_lock(-1)) {
     lv_obj_set_style_bg_color(lv_scr_act(), BACKGROUND_COLOR, LV_PART_MAIN);
     lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);
