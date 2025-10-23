@@ -19,7 +19,18 @@ lv_obj_t *img;
 lv_obj_t *meter;
 lv_meter_indicator_t *indic;
 
-void meterEventCallback(lv_event_t *e) {
+bool is_backlight_on = true;
+
+void click_handler(lv_event_t *event) {
+  if (is_backlight_on) {
+    waveshare_rgb_lcd_bl_off();
+  } else {
+    waveshare_rgb_lcd_bl_on();
+  }
+  is_backlight_on = !is_backlight_on;
+}
+
+void meter_event_callback(lv_event_t *e) {
   lv_event_code_t code = lv_event_get_code(e);
 
   if (code == LV_EVENT_DRAW_PART_BEGIN) {
@@ -76,8 +87,6 @@ void app_main() {
   lv_color_t COLOR = lv_color_hex(0xa4b700);
 
   waveshare_esp32_s3_rgb_lcd_init(); // Initialize the Waveshare ESP32-S3 RGB LCD
-  // waveshare_rgb_lcd_bl_on();  //Turn on the screen backlight
-  // waveshare_rgb_lcd_bl_off(); //Turn off the screen backlight
 
   vTaskDelay(1); // Prevent LVGL slow boot
 
@@ -88,12 +97,13 @@ void app_main() {
     meter = lv_meter_create(lv_scr_act());
 
     lv_obj_clear_flag(meter, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(meter, click_handler, LV_EVENT_CLICKED, NULL);
 
     // Remove outside circle, padding, and circle from the middle
     lv_obj_remove_style(meter, NULL, LV_PART_MAIN);
     lv_obj_remove_style(meter, NULL, LV_PART_INDICATOR);
 
-    lv_obj_add_event_cb(meter, meterEventCallback, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    lv_obj_add_event_cb(meter, meter_event_callback, LV_EVENT_DRAW_PART_BEGIN, NULL);
     lv_obj_align(meter, LV_ALIGN_CENTER, 0, 250);
     lv_obj_set_size(meter, 940, 940);
     lv_obj_set_style_bg_color(meter, BACKGROUND_COLOR, LV_PART_MAIN);
