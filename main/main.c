@@ -13,9 +13,9 @@
 #define TACHOMETER_I2C_ADDRESS 0x1
 
 const int BORDER_WIDTH = 5;
-const int INDICATOR_WIDTH = 40;
-const int MAJOR_TICK_WIDTH = 4;
-const int MINOR_TICK_WIDTH = 4;
+const int INDICATOR_WIDTH = 50;
+const int MAJOR_TICK_WIDTH = 2;
+const int MINOR_TICK_WIDTH = 2;
 const int PADDING = 14;
 
 lv_obj_t *img;
@@ -115,23 +115,17 @@ void app_main() {
 
     lv_meter_set_scale_range(meter, scale, 0, 6000, 180, 180);
     lv_meter_set_scale_ticks(
-      meter, scale, 151, MINOR_TICK_WIDTH, INDICATOR_WIDTH + MINOR_TICK_WIDTH * 2, BACKGROUND_COLOR
+      meter, scale, 151, MINOR_TICK_WIDTH, INDICATOR_WIDTH, BACKGROUND_COLOR
     );
     lv_meter_set_scale_major_ticks(
-      meter,
-      scale,
-      25,
-      MAJOR_TICK_WIDTH,
-      INDICATOR_WIDTH + MINOR_TICK_WIDTH * 2,
-      BACKGROUND_COLOR,
-      50
+      meter, scale, 25, MAJOR_TICK_WIDTH, INDICATOR_WIDTH, BACKGROUND_COLOR, 50
     );
     lv_obj_set_style_text_font(meter, &lv_font_montserrat_48, LV_PART_MAIN);
     lv_obj_set_style_text_color(meter, COLOR, 0);
     lv_obj_set_style_pad_all(meter, PADDING + BORDER_WIDTH, LV_PART_MAIN);
 
     // Add arc indicators
-    indic = lv_meter_add_arc(meter, scale, INDICATOR_WIDTH + MINOR_TICK_WIDTH * 2, COLOR, 0);
+    indic = lv_meter_add_arc(meter, scale, INDICATOR_WIDTH, COLOR, 0);
 
     lv_meter_indicator_t *indic2 =
       lv_meter_add_arc(meter, scale, BORDER_WIDTH, COLOR, PADDING * 1.2);
@@ -139,9 +133,8 @@ void app_main() {
     lv_meter_set_indicator_start_value(meter, indic2, 0);
     lv_meter_set_indicator_end_value(meter, indic2, 6000);
 
-    lv_meter_indicator_t *indic3 = lv_meter_add_arc(
-      meter, scale, BORDER_WIDTH, COLOR, -INDICATOR_WIDTH - BORDER_WIDTH - PADDING
-    );
+    lv_meter_indicator_t *indic3 =
+      lv_meter_add_arc(meter, scale, BORDER_WIDTH, COLOR, -INDICATOR_WIDTH - PADDING + 3);
 
     lv_meter_set_indicator_start_value(meter, indic3, 0);
     lv_meter_set_indicator_end_value(meter, indic3, 6000);
@@ -152,7 +145,7 @@ void app_main() {
     lv_style_set_line_width(&lineStyle, BORDER_WIDTH);
     lv_style_set_line_color(&lineStyle, COLOR);
 
-    const int lineWidth = INDICATOR_WIDTH + PADDING * 2 + BORDER_WIDTH + 2;
+    const int lineWidth = INDICATOR_WIDTH + PADDING * 2;
     static lv_point_t linePoints[] = {
       {0, 0},
       {1, 2},
@@ -186,7 +179,7 @@ void app_main() {
     lv_obj_set_style_img_recolor(img, COLOR, 0);
     lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
 
-    // lv_meter_set_indicator_end_value(meter, indic, 800);
+    lv_meter_set_indicator_end_value(meter, indic, 6000);
 
     lvgl_port_unlock();
   }
