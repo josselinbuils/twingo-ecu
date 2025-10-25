@@ -2,4 +2,4 @@
 
 ## Resources
 
-- [Documentation LVGL 8.4](https://docs.lvgl.io/8.4/)
+- [Documentation LVGL 9.4](https://docs.lvgl.io/9.4/)

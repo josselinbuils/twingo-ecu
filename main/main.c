@@ -1,5 +1,6 @@
 #include "esp_lvgl_port.h"
 #include "lcd.h"
+#include "twingo_logo.c"
 #include "external/waveshare_twai_port.h"
 #include <driver/i2c.h>
 #include <lvgl.h>
@@ -193,7 +194,7 @@ void app_main() {
 
     lv_obj_set_style_length(outer_scale, 0, LV_PART_ITEMS);
 
-    static char *labels[] = {"0", "1", "2", "3", "4", "5", "6", NULL};
+    static char *labels[7] = {"0", "1", "2", "3", "4", "5", "6", NULL};
 
     lv_scale_set_label_show(inner_scale, true);
     lv_scale_set_text_src(inner_scale, labels);
@@ -243,14 +244,16 @@ void app_main() {
     lv_obj_align(end_line_2, LV_ALIGN_RIGHT_MID, 0, 3);
 
     // Add twingo logo
-    // lv_obj_t *img = lv_img_create(scale);
+    LV_IMG_DECLARE(twingo_logo)
 
-    // lv_image_set_src(img, "S:twingo_logo.svg");
-    // lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
-    // lv_obj_set_style_img_recolor(img, COLOR, 0);
-    // lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
+    lv_obj_t *img = lv_img_create(inner_scale);
 
-    lv_arc_set_value(indic, 5500);
+    lv_img_set_src(img, &twingo_logo);
+    lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
+    lv_obj_set_style_img_recolor(img, COLOR, 0);
+    lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
+
+    // lv_arc_set_value(indic, 5500);
 
     lvgl_port_unlock();
   }
