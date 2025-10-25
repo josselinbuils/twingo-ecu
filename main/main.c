@@ -17,11 +17,10 @@ const int BORDER_WIDTH = 5;
 const int INDICATOR_RANGE = 6000;
 const int INDICATOR_WIDTH = 40;
 const int LABELS_GAP = 30;
-const int MAJOR_TICK_WIDTH = 2;
-const int MINOR_TICK_WIDTH = 2;
 const int PADDING = 10;
-const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
 const int SCALE_SIZE = 940;
+const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
+const int TICK_WIDTH = 2;
 
 lv_obj_t *indic;
 
@@ -144,6 +143,12 @@ void app_main() {
     lv_obj_set_size(inner_scale, SCALE_SIZE, SCALE_SIZE);
     lv_obj_set_size(outer_scale, SCALE_SIZE, SCALE_SIZE);
 
+    lv_scale_set_angle_range(inner_scale, 180);
+    lv_scale_set_angle_range(outer_scale, 180);
+
+    lv_scale_set_rotation(inner_scale, 180);
+    lv_scale_set_rotation(outer_scale, 180);
+
     static lv_style_t main_line_style;
 
     lv_style_init(&main_line_style);
@@ -151,14 +156,8 @@ void app_main() {
     lv_style_set_arc_color(&main_line_style, COLOR);
     lv_style_set_arc_width(&main_line_style, BORDER_WIDTH);
 
-    lv_obj_add_style(outer_scale, &main_line_style, LV_PART_MAIN);
     lv_obj_add_style(inner_scale, &main_line_style, LV_PART_MAIN);
-
-    lv_scale_set_angle_range(inner_scale, 180);
-    lv_scale_set_rotation(inner_scale, 180);
-    lv_scale_set_angle_range(outer_scale, 180);
-    lv_scale_set_rotation(outer_scale, 180);
-    lv_scale_set_label_show(outer_scale, false);
+    lv_obj_add_style(outer_scale, &main_line_style, LV_PART_MAIN);
 
     // Inner scale
 
@@ -172,27 +171,20 @@ void app_main() {
     lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_ITEMS);
     lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_INDICATOR);
 
+    static lv_style_t tick_style;
+
+    lv_style_init(&tick_style);
+    lv_style_set_line_width(&tick_style, TICK_WIDTH);
+    lv_style_set_line_color(&tick_style, BACKGROUND_COLOR);
+    lv_style_set_line_width(&tick_style, TICK_WIDTH);
+    lv_style_set_text_color(&tick_style, COLOR);
+    lv_style_set_text_font(&tick_style, &lv_font_montserrat_48);
+
     lv_scale_section_t *main_section = lv_scale_add_section(inner_scale);
 
     lv_scale_section_set_range(main_section, 0, INDICATOR_RANGE);
-
-    static lv_style_t minor_tick_style;
-
-    lv_style_init(&minor_tick_style);
-    lv_style_set_line_width(&minor_tick_style, MINOR_TICK_WIDTH);
-    lv_scale_set_section_style_items(inner_scale, main_section, &minor_tick_style);
-
-    static lv_style_t major_tick_style;
-
-    lv_style_init(&major_tick_style);
-    lv_style_set_line_width(&major_tick_style, MAJOR_TICK_WIDTH);
-    lv_style_set_text_color(&major_tick_style, COLOR);
-    lv_style_set_text_font(&major_tick_style, &lv_font_montserrat_48);
-    lv_scale_set_section_style_indicator(inner_scale, main_section, &major_tick_style);
-
-    lv_scale_set_total_tick_count(outer_scale, 2);
-
-    lv_obj_set_style_length(outer_scale, 0, LV_PART_ITEMS);
+    lv_scale_set_section_style_items(inner_scale, main_section, &tick_style);
+    lv_scale_set_section_style_indicator(inner_scale, main_section, &tick_style);
 
     static char *labels[7] = {"0", "1", "2", "3", "4", "5", "6", NULL};
 
@@ -202,6 +194,9 @@ void app_main() {
 
     // Outer scale
 
+    lv_scale_set_label_show(outer_scale, false);
+    lv_scale_set_total_tick_count(outer_scale, 2);
+    lv_obj_set_style_length(outer_scale, 0, LV_PART_ITEMS);
     lv_obj_set_style_pad_all(
       outer_scale, BORDER_WIDTH + PADDING + INDICATOR_WIDTH + PADDING, LV_PART_MAIN
     );
@@ -244,6 +239,7 @@ void app_main() {
     lv_obj_align(end_line_2, LV_ALIGN_RIGHT_MID, 0, 3);
 
     // Add twingo logo
+
     LV_IMG_DECLARE(twingo_logo)
 
     lv_obj_t *img = lv_img_create(inner_scale);
