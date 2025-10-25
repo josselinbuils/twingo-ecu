@@ -78,8 +78,8 @@ void app_main() {
   lv_color_t BACKGROUND_COLOR = lv_color_hex(0x101200);
   lv_color_t COLOR = lv_color_hex(0xa4b700);
 
-  ESP_LOGI(TAG, "Initialize CAN bus");
-  ESP_ERROR_CHECK(waveshare_twai_init());
+  // ESP_LOGI(TAG, "Initialize CAN bus");
+  // ESP_ERROR_CHECK(waveshare_twai_init());
 
   ESP_LOGI(TAG, "Initialize LCD panel");
   ESP_ERROR_CHECK(lcd_init());
@@ -278,6 +278,6 @@ void app_main() {
       ESP_LOGI(TAG, "Master read slave error, IO not connected...\n");
     }
 
-    ESP_ERROR_CHECK(waveshare_twai_receive());
+    // ESP_ERROR_CHECK(waveshare_twai_receive());
   }
 }

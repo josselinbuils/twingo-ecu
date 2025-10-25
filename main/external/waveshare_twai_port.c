@@ -106,6 +106,8 @@ esp_err_t waveshare_twai_receive() // Receive messages via TWAI
     while (twai_receive(&message, 0) == ESP_OK) { // Receive messages until none are left
       handle_rx_message(message); // Process each received message
     }
+  } else {
+    ESP_LOGI(TAG, "No message received");
   }
   return ESP_OK; // Return success
 }
