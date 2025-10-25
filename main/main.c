@@ -1,6 +1,6 @@
-#include "twingo_logo.c"
-#include "waveshare_rgb_lcd_port.h"
-#include "waveshare_twai_port.h"
+#include "esp_lvgl_port.h"
+#include "lcd.h"
+#include "external/waveshare_twai_port.h"
 #include <driver/i2c.h>
 #include <lvgl.h>
 
@@ -13,37 +13,26 @@
 #define TACHOMETER_I2C_ADDRESS 0x1
 
 const int BORDER_WIDTH = 5;
-const int INDICATOR_WIDTH = 50;
+const int INDICATOR_RANGE = 6000;
+const int INDICATOR_WIDTH = 40;
+const int LABELS_GAP = 30;
 const int MAJOR_TICK_WIDTH = 2;
 const int MINOR_TICK_WIDTH = 2;
-const int PADDING = 14;
+const int PADDING = 10;
+const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
+const int SCALE_SIZE = 940;
 
-lv_obj_t *img;
-lv_obj_t *meter;
-lv_meter_indicator_t *indic;
+lv_obj_t *indic;
 
 bool is_backlight_on = true;
 
 void click_handler(lv_event_t *event) {
   if (is_backlight_on) {
-    waveshare_rgb_lcd_bl_off();
+    lcd_backlight_on();
   } else {
-    waveshare_rgb_lcd_bl_on();
+    lcd_backlight_off();
   }
   is_backlight_on = !is_backlight_on;
-}
-
-void meter_event_callback(lv_event_t *e) {
-  lv_event_code_t code = lv_event_get_code(e);
-
-  if (code == LV_EVENT_DRAW_PART_BEGIN) {
-    lv_obj_draw_part_dsc_t *dsc = (lv_obj_draw_part_dsc_t *)lv_event_get_param(e);
-
-    if (dsc->value % 1000 == 0) {
-      dsc->value /= 1000;
-      lv_snprintf(dsc->text, sizeof(dsc->text), "%d", (int)dsc->value);
-    }
-  }
 }
 
 bool check_i2c_device(i2c_port_t port, uint8_t address) {
@@ -89,103 +78,182 @@ void app_main() {
   lv_color_t BACKGROUND_COLOR = lv_color_hex(0x101200);
   lv_color_t COLOR = lv_color_hex(0xa4b700);
 
-  waveshare_esp32_s3_rgb_lcd_init(); // Initialize the Waveshare ESP32-S3 RGB LCD
+  ESP_LOGI(TAG, "Initialize CAN bus");
+  ESP_ERROR_CHECK(waveshare_twai_init());
+
+  ESP_LOGI(TAG, "Initialize LCD panel");
+  ESP_ERROR_CHECK(lcd_init());
+
+  ESP_LOGI(TAG, "Initialize I2C");
+  ESP_ERROR_CHECK(i2c_init());
+
+  ESP_LOGI(TAG, "Initialize GPIO");
+  gpio_init();
+
+  ESP_LOGI(TAG, "Initialize touch");
+  ESP_ERROR_CHECK(touch_init());
+
+  ESP_LOGI(TAG, "Initialize LVGL");
+  ESP_ERROR_CHECK(lvgl_init());
 
   vTaskDelay(1); // Prevent LVGL slow boot
 
   if (lvgl_port_lock(-1)) {
-    lv_obj_set_style_bg_color(lv_scr_act(), BACKGROUND_COLOR, LV_PART_MAIN);
-    lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(lv_screen_active(), BACKGROUND_COLOR, LV_PART_MAIN);
+    lv_obj_clear_flag(lv_screen_active(), LV_OBJ_FLAG_SCROLLABLE);
 
-    meter = lv_meter_create(lv_scr_act());
+    // Arc indicator
 
-    lv_obj_clear_flag(meter, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(meter, click_handler, LV_EVENT_CLICKED, NULL);
+    indic = lv_arc_create(lv_screen_active());
 
-    // Remove outside circle, padding, and circle from the middle
-    lv_obj_remove_style(meter, NULL, LV_PART_MAIN);
-    lv_obj_remove_style(meter, NULL, LV_PART_INDICATOR);
+    lv_obj_remove_style(indic, NULL, LV_PART_KNOB);
+    lv_obj_align(indic, LV_ALIGN_CENTER, 0, 250);
+    lv_obj_set_size(indic, SCALE_SIZE, SCALE_SIZE);
+    lv_obj_set_style_arc_opa(indic, 0, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(indic, COLOR, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(indic, INDICATOR_WIDTH, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(indic, INDICATOR_WIDTH, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(indic, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(indic, 0, LV_PART_INDICATOR);
+    lv_arc_set_rotation(indic, 180);
+    lv_arc_set_bg_angles(indic, 0, 180);
+    lv_arc_set_range(indic, 0, INDICATOR_RANGE);
+    lv_obj_set_style_pad_all(indic, PADDING + BORDER_WIDTH, LV_PART_MAIN);
 
-    lv_obj_add_event_cb(meter, meter_event_callback, LV_EVENT_DRAW_PART_BEGIN, NULL);
-    lv_obj_align(meter, LV_ALIGN_CENTER, 0, 250);
-    lv_obj_set_size(meter, 940, 940);
-    lv_obj_set_style_bg_color(meter, BACKGROUND_COLOR, LV_PART_MAIN);
+    static lv_style_t indic_style;
 
-    lv_meter_scale_t *scale = lv_meter_add_scale(meter);
+    lv_style_init(&indic_style);
+    lv_style_set_arc_rounded(&indic_style, false);
+    lv_obj_add_style(indic, &indic_style, LV_PART_INDICATOR);
 
-    lv_meter_set_scale_range(meter, scale, 0, 6000, 180, 180);
-    lv_meter_set_scale_ticks(
-      meter, scale, 151, MINOR_TICK_WIDTH, INDICATOR_WIDTH, BACKGROUND_COLOR
+    // Scales
+
+    lv_obj_t *inner_scale = lv_scale_create(lv_screen_active());
+    lv_obj_t *outer_scale = lv_scale_create(lv_screen_active());
+
+    lv_obj_clear_flag(inner_scale, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(outer_scale, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_scale_set_mode(inner_scale, LV_SCALE_MODE_ROUND_INNER);
+    lv_scale_set_mode(outer_scale, LV_SCALE_MODE_ROUND_OUTER);
+
+    lv_obj_align(inner_scale, LV_ALIGN_CENTER, 0, 250);
+    lv_obj_align(outer_scale, LV_ALIGN_CENTER, 0, 250);
+
+    lv_obj_set_size(inner_scale, SCALE_SIZE, SCALE_SIZE);
+    lv_obj_set_size(outer_scale, SCALE_SIZE, SCALE_SIZE);
+
+    static lv_style_t main_line_style;
+
+    lv_style_init(&main_line_style);
+    lv_style_set_bg_color(&main_line_style, BACKGROUND_COLOR);
+    lv_style_set_arc_color(&main_line_style, COLOR);
+    lv_style_set_arc_width(&main_line_style, BORDER_WIDTH);
+
+    lv_obj_add_style(outer_scale, &main_line_style, LV_PART_MAIN);
+    lv_obj_add_style(inner_scale, &main_line_style, LV_PART_MAIN);
+
+    lv_scale_set_angle_range(inner_scale, 180);
+    lv_scale_set_rotation(inner_scale, 180);
+    lv_scale_set_angle_range(outer_scale, 180);
+    lv_scale_set_rotation(outer_scale, 180);
+    lv_scale_set_label_show(outer_scale, false);
+
+    // Inner scale
+
+    lv_obj_add_event(inner_scale, click_handler, LV_EVENT_CLICKED, NULL);
+
+    lv_scale_set_range(inner_scale, 0, INDICATOR_RANGE);
+
+    lv_scale_set_total_tick_count(inner_scale, 151);
+    lv_scale_set_major_tick_every(inner_scale, 25);
+
+    lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_ITEMS);
+    lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_INDICATOR);
+
+    lv_scale_section_t *main_section = lv_scale_add_section(inner_scale);
+
+    lv_scale_section_set_range(main_section, 0, INDICATOR_RANGE);
+
+    static lv_style_t minor_tick_style;
+
+    lv_style_init(&minor_tick_style);
+    lv_style_set_line_width(&minor_tick_style, MINOR_TICK_WIDTH);
+    lv_scale_set_section_style_items(inner_scale, main_section, &minor_tick_style);
+
+    static lv_style_t major_tick_style;
+
+    lv_style_init(&major_tick_style);
+    lv_style_set_line_width(&major_tick_style, MAJOR_TICK_WIDTH);
+    lv_style_set_text_color(&major_tick_style, COLOR);
+    lv_style_set_text_font(&major_tick_style, &lv_font_montserrat_48);
+    lv_scale_set_section_style_indicator(inner_scale, main_section, &major_tick_style);
+
+    lv_scale_set_total_tick_count(outer_scale, 2);
+
+    lv_obj_set_style_length(outer_scale, 0, LV_PART_ITEMS);
+
+    static char *labels[] = {"0", "1", "2", "3", "4", "5", "6", NULL};
+
+    lv_scale_set_label_show(inner_scale, true);
+    lv_scale_set_text_src(inner_scale, labels);
+    lv_obj_set_style_pad_radial(inner_scale, LABELS_GAP, LV_PART_INDICATOR);
+
+    // Outer scale
+
+    lv_obj_set_style_pad_all(
+      outer_scale, BORDER_WIDTH + PADDING + INDICATOR_WIDTH + PADDING, LV_PART_MAIN
     );
-    lv_meter_set_scale_major_ticks(
-      meter, scale, 25, MAJOR_TICK_WIDTH, INDICATOR_WIDTH, BACKGROUND_COLOR, 50
-    );
-    lv_obj_set_style_text_font(meter, &lv_font_montserrat_48, LV_PART_MAIN);
-    lv_obj_set_style_text_color(meter, COLOR, 0);
-    lv_obj_set_style_pad_all(meter, PADDING + BORDER_WIDTH, LV_PART_MAIN);
 
-    // Add arc indicators
-    indic = lv_meter_add_arc(meter, scale, INDICATOR_WIDTH, COLOR, 0);
+    // End lines
 
-    lv_meter_indicator_t *indic2 =
-      lv_meter_add_arc(meter, scale, BORDER_WIDTH, COLOR, PADDING * 1.2);
+    static lv_style_t line_style;
 
-    lv_meter_set_indicator_start_value(meter, indic2, 0);
-    lv_meter_set_indicator_end_value(meter, indic2, 6000);
+    lv_style_init(&line_style);
+    lv_style_set_line_width(&line_style, BORDER_WIDTH);
+    lv_style_set_line_color(&line_style, COLOR);
 
-    lv_meter_indicator_t *indic3 =
-      lv_meter_add_arc(meter, scale, BORDER_WIDTH, COLOR, -INDICATOR_WIDTH - PADDING + 3);
+    const int end_line_width = INDICATOR_WIDTH + PADDING * 2 + BORDER_WIDTH * 2 - 2;
 
-    lv_meter_set_indicator_start_value(meter, indic3, 0);
-    lv_meter_set_indicator_end_value(meter, indic3, 6000);
-
-    static lv_style_t lineStyle;
-
-    lv_style_init(&lineStyle);
-    lv_style_set_line_width(&lineStyle, BORDER_WIDTH);
-    lv_style_set_line_color(&lineStyle, COLOR);
-
-    const int lineWidth = INDICATOR_WIDTH + PADDING * 2;
-    static lv_point_t linePoints[] = {
+    static lv_point_precise_t end_line_points[] = {
       {0, 0},
       {1, 2},
       {2, 4},
       {4, 6},
       {6, 8},
       {8, 10},
-      {lineWidth - 8, 10},
-      {lineWidth - 6, 8},
-      {lineWidth - 4, 6},
-      {lineWidth - 2, 4},
-      {lineWidth - 1, 2},
-      {lineWidth, 0}
+      {end_line_width - 8, 10},
+      {end_line_width - 6, 8},
+      {end_line_width - 4, 6},
+      {end_line_width - 2, 4},
+      {end_line_width - 1, 2},
+      {end_line_width, 0}
     };
 
-    lv_obj_t *line1 = lv_line_create(meter);
-    lv_line_set_points(line1, linePoints, 12);
-    lv_obj_add_style(line1, &lineStyle, 0);
-    lv_obj_align(line1, LV_ALIGN_LEFT_MID, -PADDING, 5);
+    lv_obj_t *end_line_1 = lv_line_create(inner_scale);
 
-    lv_obj_t *line2 = lv_line_create(meter);
-    lv_line_set_points(line2, linePoints, 12);
-    lv_obj_add_style(line2, &lineStyle, 0);
-    lv_obj_align(line2, LV_ALIGN_RIGHT_MID, PADDING + BORDER_WIDTH, 5);
+    lv_line_set_points(end_line_1, end_line_points, 12);
+    lv_obj_add_style(end_line_1, &line_style, 0);
+    lv_obj_align(end_line_1, LV_ALIGN_LEFT_MID, 0, 3);
+
+    lv_obj_t *end_line_2 = lv_line_create(inner_scale);
+
+    lv_line_set_points(end_line_2, end_line_points, 12);
+    lv_obj_add_style(end_line_2, &line_style, 0);
+    lv_obj_align(end_line_2, LV_ALIGN_RIGHT_MID, 0, 3);
 
     // Add twingo logo
-    LV_IMG_DECLARE(twingoLogo)
-    img = lv_img_create(meter);
-    lv_img_set_src(img, &twingoLogo);
-    lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
-    lv_obj_set_style_img_recolor(img, COLOR, 0);
-    lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
+    // lv_obj_t *img = lv_img_create(scale);
 
-    lv_meter_set_indicator_end_value(meter, indic, 6000);
+    // lv_image_set_src(img, "S:twingo_logo.svg");
+    // lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
+    // lv_obj_set_style_img_recolor(img, COLOR, 0);
+    // lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
+
+    lv_arc_set_value(indic, 5500);
 
     lvgl_port_unlock();
   }
-
-  // ESP_LOGI(TAG, "Initialize CAN bus");
-  // ESP_ERROR_CHECK(waveshare_twai_init());
 
   while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");
@@ -203,12 +271,14 @@ void app_main() {
     } else if (ret == ESP_OK) {
       if (lvgl_port_lock(-1)) {
         uint16_t rpm = buffer[0] | (buffer[1] << 8);
-        lv_meter_set_indicator_end_value(meter, indic, rpm);
+        lv_arc_set_value(indic, rpm);
         lvgl_port_unlock();
         // ESP_LOGI(TAG, "rpm: %d\n", rpm);
       }
     } else {
       ESP_LOGI(TAG, "Master read slave error, IO not connected...\n");
     }
+
+    ESP_ERROR_CHECK(waveshare_twai_receive());
   }
 }

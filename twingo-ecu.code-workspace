@@ -24,7 +24,12 @@
 			"esp_lcd_panel_ops.h": "c",
 			"task.h": "c",
 			"lv_demo_music.h": "c",
-			"queue.h": "c"
+			"queue.h": "c",
+			"waveshare_twai_port.h": "c",
+			"lcd.h": "c",
+			"esp_lvgl_port.h": "c",
+			"esp_idf_version.h": "c",
+			"lv_demos.h": "c"
 		}
 	}
 }
