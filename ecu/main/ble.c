@@ -490,8 +490,8 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
       str[buffer_len] = '\0';
       MODLOG_DFLT(INFO, "data: %s", str);
-
       (*notification_callback)(str);
+      free(str);
 
       /* Attribute data is contained in event->notify_rx.om. Use
        * `os_mbuf_copydata` to copy the data received in notification mbuf */

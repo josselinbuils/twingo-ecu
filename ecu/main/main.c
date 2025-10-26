@@ -302,10 +302,11 @@ void app_main() {
         lvgl_port_unlock();
         // ESP_LOGI(TAG, "rpm: %d\n", rpm);
       }
+      free(buffer);
     } else {
       ESP_LOGI(TAG, "Master read slave error, IO not connected...\n");
     }
 
-    ESP_ERROR_CHECK(waveshare_twai_receive());
+    // ESP_ERROR_CHECK(waveshare_twai_receive());
   }
 }
