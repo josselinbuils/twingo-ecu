@@ -53,171 +53,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 
 void ble_store_config_init(void);
 
-/**
- * Application Callback. Called when the custom subscribable chatacteristic
- * in the remote GATT server is read.
- * Expect to get the recently written data.
- **/
-static int blecent_on_custom_read(
-  uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
-) {
-  MODLOG_DFLT(
-    INFO,
-    "Read complete for the subscribable characteristic; "
-    "status=%d conn_handle=%d",
-    error->status,
-    conn_handle
-  );
-  if (error->status == 0) {
-    MODLOG_DFLT(INFO, " attr_handle=%d value=", attr->handle);
-    print_mbuf(attr->om);
-  }
-  MODLOG_DFLT(INFO, "\n");
-
-  return 0;
-}
-
-/**
- * Application Callback. Called when the custom subscribable characteristic
- * in the remote GATT server is written to.
- * Client has previously subscribed to this characeteristic,
- * so expect a notification from the server.
- **/
-static int blecent_on_custom_write(
-  uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
-) {
-  const struct peer_chr *chr;
-  const struct peer *peer;
-  int rc;
-
-  MODLOG_DFLT(
-    INFO,
-    "Write to the custom subscribable characteristic complete; "
-    "status=%d conn_handle=%d attr_handle=%d\n",
-    error->status,
-    conn_handle,
-    attr->handle
-  );
-
-  peer = peer_find(conn_handle);
-  chr = peer_chr_find_uuid(peer, remote_svc_uuid, remote_chr_current_music_uuid);
-  if (chr == NULL) {
-    MODLOG_DFLT(ERROR, "Error: Peer doesn't have the custom subscribable characteristic\n");
-    goto err;
-  }
-
-  /*** Performs a read on the characteristic, the result is handled in blecent_on_new_read callback ***/
-  rc = ble_gattc_read(conn_handle, chr->chr.val_handle, blecent_on_custom_read, NULL);
-  if (rc != 0) {
-    MODLOG_DFLT(
-      ERROR,
-      "Error: Failed to read the custom subscribable characteristic; "
-      "rc=%d\n",
-      rc
-    );
-    goto err;
-  }
-
-  return 0;
-err:
-  /* Terminate the connection */
-  return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-}
-
-/**
- * Application Callback. Called when the custom subscribable characteristic
- * is subscribed to.
- **/
-static int blecent_on_custom_subscribe(
-  uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
-) {
-  const struct peer_chr *chr;
-  uint8_t value;
-  int rc;
-  const struct peer *peer;
-
-  MODLOG_DFLT(
-    INFO,
-    "Subscribe to the custom subscribable characteristic complete; "
-    "status=%d conn_handle=%d",
-    error->status,
-    conn_handle
-  );
-
-  if (error->status == 0) {
-    MODLOG_DFLT(INFO, " attr_handle=%d value=", attr->handle);
-    print_mbuf(attr->om);
-  }
-  MODLOG_DFLT(INFO, "\n");
-
-  peer = peer_find(conn_handle);
-  chr = peer_chr_find_uuid(peer, remote_svc_uuid, remote_chr_current_music_uuid);
-  if (chr == NULL) {
-    MODLOG_DFLT(ERROR, "Error: Peer doesn't have the subscribable characteristic\n");
-    goto err;
-  }
-
-  /* Write 1 byte to the new characteristic to test if it notifies after subscribing */
-  value = 0x19;
-  rc = ble_gattc_write_flat(
-    conn_handle, chr->chr.val_handle, &value, sizeof(value), blecent_on_custom_write, NULL
-  );
-  if (rc != 0) {
-    MODLOG_DFLT(
-      ERROR,
-      "Error: Failed to write to the subscribable characteristic; "
-      "rc=%d\n",
-      rc
-    );
-    goto err;
-  }
-
-  return 0;
-err:
-  /* Terminate the connection */
-  return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-}
-
-/**
- * Performs 3 operations on the remote GATT server.
- * 1. Subscribes to a characteristic by writing 0x10 to it's CCCD.
- * 2. Writes to the characteristic and expect a notification from remote.
- * 3. Reads the characteristic and expect to get the recently written information.
- **/
-static void blecent_custom_gatt_operations(const struct peer *peer) {
-  const struct peer_dsc *dsc;
-  int rc;
-  uint8_t value[2];
-
-  dsc = peer_dsc_find_uuid(
-    peer, remote_svc_uuid, remote_chr_current_music_uuid, remote_cccd_new_music_uuid
-  );
-  if (dsc == NULL) {
-    MODLOG_DFLT(ERROR, "Error: peer lacks a CCCD for the current music characteristic");
-    goto err;
-  }
-
-  /*** Write 0x00 and 0x01 (The subscription code) to the CCCD ***/
-  value[0] = 1;
-  value[1] = 0;
-  rc = ble_gattc_write_flat(
-    peer->conn_handle, dsc->dsc.handle, value, sizeof(value), blecent_on_custom_subscribe, NULL
-  );
-  if (rc != 0) {
-    MODLOG_DFLT(
-      ERROR,
-      "Error: failed to subscribe to the subscribable characteristic; "
-      "rc=%d\n",
-      rc
-    );
-    goto err;
-  }
-
-  return;
-err:
-  /* Terminate the connection */
-  ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-}
+void (*notification_callback)(const char *textid);
 
 /**
  * Application callback.  Called when the attempt to subscribe to notifications
@@ -242,8 +78,6 @@ static int blecent_on_subscribe(
     MODLOG_DFLT(ERROR, "Error in finding peer, aborting...");
     ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
   }
-  /* Subscribe to, write to, and read the custom characteristic*/
-  // blecent_custom_gatt_operations(peer);
 
   return 0;
 }
@@ -638,6 +472,8 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       return 0;
 
     case BLE_GAP_EVENT_NOTIFY_RX:
+      int buffer_len = OS_MBUF_PKTLEN(event->notify_rx.om);
+
       /* Peer sent us a notification or indication. */
       MODLOG_DFLT(
         INFO,
@@ -646,8 +482,16 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         event->notify_rx.indication ? "indication" : "notification",
         event->notify_rx.conn_handle,
         event->notify_rx.attr_handle,
-        OS_MBUF_PKTLEN(event->notify_rx.om)
+        buffer_len
       );
+
+      char *str;
+      str = malloc(buffer_len + 1);
+      os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
+      str[buffer_len] = '\0';
+      MODLOG_DFLT(INFO, "data: %s", str);
+
+      (*notification_callback)(str);
 
       /* Attribute data is contained in event->notify_rx.om. Use
        * `os_mbuf_copydata` to copy the data received in notification mbuf */
@@ -707,7 +551,7 @@ void blecent_host_task(void *param) {
   nimble_port_freertos_deinit();
 }
 
-void init_ble(void) {
+void init_ble(void (*callback)()) {
   /* Initialize NVS — it is used to store PHY calibration data */
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -715,6 +559,8 @@ void init_ble(void) {
     ret = nvs_flash_init();
   }
   ESP_ERROR_CHECK(ret);
+
+  notification_callback = callback;
 
   ret = nimble_port_init();
   if (ret != ESP_OK) {

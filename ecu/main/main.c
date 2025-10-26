@@ -24,6 +24,7 @@ const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
 const int TICK_WIDTH = 2;
 
 lv_obj_t *indic;
+lv_obj_t *label;
 
 bool is_backlight_on = true;
 
@@ -73,6 +74,15 @@ static esp_err_t __attribute__((unused)) i2c_master_read_slave(
   esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 50 / portTICK_PERIOD_MS);
   i2c_cmd_link_delete(cmd);
   return ret;
+}
+
+void set_label_text(const char *text) {
+  ESP_LOGI(TAG, "Set label text: %s", text);
+
+  if (lvgl_port_lock(-1)) {
+    lv_label_set_text(label, text);
+    lvgl_port_unlock();
+  }
 }
 
 void app_main() {
@@ -250,13 +260,27 @@ void app_main() {
     lv_obj_set_style_img_recolor(img, COLOR, 0);
     lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
 
+    // Add text
+
+    label = lv_label_create(inner_scale);
+    lv_label_set_text(label, "Test");
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+
+    static lv_style_t label_style;
+
+    lv_style_init(&label_style);
+    lv_style_set_text_color(&label_style, COLOR);
+    lv_style_set_text_font(&label_style, &lv_font_montserrat_28);
+    lv_obj_add_style(label, &label_style, 0);
+
     // lv_arc_set_value(indic, 5500);
 
     lvgl_port_unlock();
   }
 
   ESP_LOGI(TAG, "Initialize BLE");
-  init_ble();
+  init_ble(set_label_text);
 
   while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");

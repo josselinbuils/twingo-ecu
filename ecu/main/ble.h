@@ -33,7 +33,7 @@ struct ble_hs_cfg;
 union ble_store_value;
 union ble_store_key;
 
-void init_ble();
+void init_ble(void (*callback)());
 
 #ifdef __cplusplus
 }
