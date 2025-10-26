@@ -41,7 +41,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/editTextCharForIndicate">
+        app:layout_constraintTop_toBottomOf="@+id/editTextCharForNotify">
 
         <TextView
             android:id="@+id/textViewLog"
@@ -64,26 +64,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textViewIsAdvertising" />
-
-    <TextView
-        android:id="@+id/textViewCharForWrite"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:textSize="18sp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textViewHintCharForWrite" />
-
-    <TextView
-        android:id="@+id/textViewHintCharForWrite"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="16dp"
-        android:text="@string/text_static_char_for_write"
-        android:textSize="12sp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/editTextCharForRead" />
 
     <TextView
         android:id="@+id/textViewHintCharForRead"
@@ -112,28 +92,29 @@
         app:layout_constraintTop_toBottomOf="@+id/textViewHintCharForRead" />
 
     <TextView
-        android:id="@+id/textViewHintCharForIndicate"
+        android:id="@+id/textViewHintCharForNotify"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
-        android:text="@string/text_static_char_for_indicate"
+        android:text="@string/text_static_char_for_notify"
         android:textSize="12sp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textViewCharForWrite" />
+        app:layout_constraintTop_toBottomOf="@+id/editTextCharForRead" />
 
     <EditText
-        android:id="@+id/editTextCharForIndicate"
+        android:id="@+id/editTextCharForNotify"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
+        android:autofillHints=""
         android:ems="10"
         android:inputType="text"
         android:text="Android indication"
         app:layout_constraintEnd_toStartOf="@+id/buttonSend"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textViewHintCharForIndicate" />
+        app:layout_constraintTop_toBottomOf="@+id/textViewHintCharForNotify" />
 
     <Button
         android:id="@+id/buttonSend"
@@ -141,8 +122,8 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
         android:onClick="onTapSend"
-        android:text="@string/button_send"
-        app:layout_constraintBaseline_toBaselineOf="@+id/editTextCharForIndicate"
+        android:text="@string/button_notify"
+        app:layout_constraintBaseline_toBaselineOf="@+id/editTextCharForNotify"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <TextView

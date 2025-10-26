@@ -26,11 +26,10 @@ import java.util.*
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
-private const val SERVICE_UUID = "25AE1441-05D3-4C5B-8281-93D4E07420CF"
-private const val CHAR_FOR_READ_UUID = "25AE1442-05D3-4C5B-8281-93D4E07420CF"
-private const val CHAR_FOR_WRITE_UUID = "25AE1443-05D3-4C5B-8281-93D4E07420CF"
-private const val CHAR_FOR_INDICATE_UUID = "25AE1444-05D3-4C5B-8281-93D4E07420CF"
-private const val CCC_DESCRIPTOR_UUID = "00002902-0000-1000-8000-00805f9b34fb"
+private const val SERVICE_UUID = "39394650-8477-4ffa-bc10-dfef56583a29";
+private const val CHAR_CURRENT_MUSIC_UUID = "39394651-8477-4ffa-bc10-dfef56583a29"
+private const val CHAR_NEW_MUSIC_UUID = "39394652-8477-4ffa-bc10-dfef56583a29"
+private const val CCCD_NEW_MUSIC_UUID = "39394653-8477-4ffa-bc10-dfef56583a29"
 
 class MainActivity : AppCompatActivity() {
     private val switchAdvertising: SwitchMaterial
@@ -41,12 +40,10 @@ class MainActivity : AppCompatActivity() {
         get() = findViewById(R.id.scrollViewLog)
     private val textViewConnectionState: TextView
         get() = findViewById(R.id.textViewConnectionState)
-    private val textViewCharForWrite: TextView
-        get() = findViewById(R.id.textViewCharForWrite)
     private val editTextCharForRead: EditText
         get() = findViewById(R.id.editTextCharForRead)
-    private val editTextCharForIndicate: EditText
-        get() = findViewById(R.id.editTextCharForIndicate)
+    private val editTextCharForNotify: EditText
+        get() = findViewById(R.id.editTextCharForNotify)
     private val textViewSubscribers: TextView
         get() = findViewById(R.id.textViewSubscribers)
 
@@ -57,8 +54,7 @@ class MainActivity : AppCompatActivity() {
             // update visual state of the switch
             runOnUiThread {
                 Handler().postDelayed({
-                    if (value != switchAdvertising.isChecked)
-                        switchAdvertising.isChecked = value
+                    if (value != switchAdvertising.isChecked) switchAdvertising.isChecked = value
                 }, 200)
             }
         }
@@ -84,7 +80,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun onTapSend(view: View) {
-        bleIndicate()
+        val text = editTextCharForNotify.text.toString()
+        val data = text.toByteArray(Charsets.UTF_8)
+        charForNotify?.let {
+            it.value = data
+            for (device in subscribedDevices) {
+                appendLog("sending notification \"$text\"")
+                gattServer?.notifyCharacteristicChanged(device, it, false)
+            }
+        }
     }
 
     @SuppressLint("SetTextI18n")
@@ -142,33 +146,26 @@ class MainActivity : AppCompatActivity() {
     private fun bleStartGattServer() {
         val gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
         val service = BluetoothGattService(
-            UUID.fromString(SERVICE_UUID),
-            BluetoothGattService.SERVICE_TYPE_PRIMARY
+            UUID.fromString(SERVICE_UUID), BluetoothGattService.SERVICE_TYPE_PRIMARY
         )
         val charForRead = BluetoothGattCharacteristic(
-            UUID.fromString(CHAR_FOR_READ_UUID),
+            UUID.fromString(CHAR_CURRENT_MUSIC_UUID),
             BluetoothGattCharacteristic.PROPERTY_READ,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
-        val charForWrite = BluetoothGattCharacteristic(
-            UUID.fromString(CHAR_FOR_WRITE_UUID),
-            BluetoothGattCharacteristic.PROPERTY_WRITE,
-            BluetoothGattCharacteristic.PERMISSION_WRITE
-        )
-        val charForIndicate = BluetoothGattCharacteristic(
-            UUID.fromString(CHAR_FOR_INDICATE_UUID),
+        val charForNotify = BluetoothGattCharacteristic(
+            UUID.fromString(CHAR_NEW_MUSIC_UUID),
             BluetoothGattCharacteristic.PROPERTY_INDICATE,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
         val charConfigDescriptor = BluetoothGattDescriptor(
-            UUID.fromString(CCC_DESCRIPTOR_UUID),
+            UUID.fromString(CCCD_NEW_MUSIC_UUID),
             BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
         )
-        charForIndicate.addDescriptor(charConfigDescriptor)
+        charForNotify.addDescriptor(charConfigDescriptor)
 
         service.addCharacteristic(charForRead)
-        service.addCharacteristic(charForWrite)
-        service.addCharacteristic(charForIndicate)
+        service.addCharacteristic(charForNotify)
 
         val result = gattServer.addService(service)
         this.gattServer = gattServer
@@ -189,18 +186,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun bleIndicate() {
-        val text = editTextCharForIndicate.text.toString()
-        val data = text.toByteArray(Charsets.UTF_8)
-        charForIndicate?.let {
-            it.value = data
-            for (device in subscribedDevices) {
-                appendLog("sending indication \"$text\"")
-                gattServer?.notifyCharacteristicChanged(device, it, true)
-            }
-        }
-    }
-
     private val bluetoothManager: BluetoothManager by lazy {
         getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     }
@@ -214,16 +199,14 @@ class MainActivity : AppCompatActivity() {
         bluetoothAdapter.bluetoothLeAdvertiser
     }
 
-    private val advertiseSettings = AdvertiseSettings.Builder()
-        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
-        .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-        .setConnectable(true)
-        .build()
+    private val advertiseSettings =
+        AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM).setConnectable(true)
+            .build()
 
     private val advertiseData = AdvertiseData.Builder()
         .setIncludeDeviceName(false) // don't include name, because if name size > 8 bytes, ADVERTISE_FAILED_DATA_TOO_LARGE
-        .addServiceUuid(ParcelUuid(UUID.fromString(SERVICE_UUID)))
-        .build()
+        .addServiceUuid(ParcelUuid(UUID.fromString(SERVICE_UUID))).build()
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
@@ -247,9 +230,9 @@ class MainActivity : AppCompatActivity() {
 
     //region BLE GATT server
     private var gattServer: BluetoothGattServer? = null
-    private val charForIndicate
+    private val charForNotify
         get() = gattServer?.getService(UUID.fromString(SERVICE_UUID))
-            ?.getCharacteristic(UUID.fromString(CHAR_FOR_INDICATE_UUID))
+            ?.getCharacteristic(UUID.fromString(CHAR_NEW_MUSIC_UUID))
     private val subscribedDevices = mutableSetOf<BluetoothDevice>()
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
@@ -278,7 +261,7 @@ class MainActivity : AppCompatActivity() {
             characteristic: BluetoothGattCharacteristic
         ) {
             var log: String = "onCharacteristicRead offset=$offset"
-            if (characteristic.uuid == UUID.fromString(CHAR_FOR_READ_UUID)) {
+            if (characteristic.uuid == UUID.fromString(CHAR_CURRENT_MUSIC_UUID)) {
                 runOnUiThread {
                     val strValue = editTextCharForRead.text.toString()
                     gattServer?.sendResponse(
@@ -307,32 +290,13 @@ class MainActivity : AppCompatActivity() {
             offset: Int,
             value: ByteArray?
         ) {
-            var log: String =
+            var log =
                 "onCharacteristicWrite offset=$offset responseNeeded=$responseNeeded preparedWrite=$preparedWrite"
-            if (characteristic.uuid == UUID.fromString(CHAR_FOR_WRITE_UUID)) {
-                var strValue = value?.toString(Charsets.UTF_8) ?: ""
-                if (responseNeeded) {
-                    gattServer?.sendResponse(
-                        device,
-                        requestId,
-                        BluetoothGatt.GATT_SUCCESS,
-                        0,
-                        strValue.toByteArray(Charsets.UTF_8)
-                    )
-                    log += "\nresponse=success, value=\"$strValue\""
-                } else {
-                    log += "\nresponse=notNeeded, value=\"$strValue\""
-                }
-                runOnUiThread {
-                    textViewCharForWrite.text = strValue
-                }
+            if (responseNeeded) {
+                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                log += "\nresponse=failure, unknown UUID\n${characteristic.uuid}"
             } else {
-                if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
-                    log += "\nresponse=failure, unknown UUID\n${characteristic.uuid}"
-                } else {
-                    log += "\nresponse=notNeeded, unknown UUID\n${characteristic.uuid}"
-                }
+                log += "\nresponse=notNeeded, unknown UUID\n${characteristic.uuid}"
             }
             appendLog(log)
         }
@@ -344,7 +308,7 @@ class MainActivity : AppCompatActivity() {
             descriptor: BluetoothGattDescriptor
         ) {
             var log = "onDescriptorReadRequest"
-            if (descriptor.uuid == UUID.fromString(CCC_DESCRIPTOR_UUID)) {
+            if (descriptor.uuid == UUID.fromString(CCCD_NEW_MUSIC_UUID)) {
                 val returnValue = if (subscribedDevices.contains(device)) {
                     log += " CCCD response=ENABLE_NOTIFICATION"
                     BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
@@ -353,11 +317,7 @@ class MainActivity : AppCompatActivity() {
                     BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
                 }
                 gattServer?.sendResponse(
-                    device,
-                    requestId,
-                    BluetoothGatt.GATT_SUCCESS,
-                    0,
-                    returnValue
+                    device, requestId, BluetoothGatt.GATT_SUCCESS, 0, returnValue
                 )
             } else {
                 log += " unknown uuid=${descriptor.uuid}"
@@ -376,21 +336,19 @@ class MainActivity : AppCompatActivity() {
             value: ByteArray
         ) {
             var strLog = "onDescriptorWriteRequest"
-            if (descriptor.uuid == UUID.fromString(CCC_DESCRIPTOR_UUID)) {
+            if (descriptor.uuid == UUID.fromString(CCCD_NEW_MUSIC_UUID)) {
                 var status = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED
-                if (descriptor.characteristic.uuid == UUID.fromString(CHAR_FOR_INDICATE_UUID)) {
-                    if (Arrays.equals(value, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
+                if (descriptor.characteristic.uuid == UUID.fromString(CHAR_NEW_MUSIC_UUID)) {
+                    if (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
                         subscribedDevices.add(device)
                         status = BluetoothGatt.GATT_SUCCESS
                         strLog += ", subscribed"
-                    } else if (Arrays.equals(
-                            value,
-                            BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
-                        )
-                    ) {
+                    } else if (value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
                         subscribedDevices.remove(device)
                         status = BluetoothGatt.GATT_SUCCESS
                         strLog += ", unsubscribed"
+                    } else {
+                        strLog += ", unknown status: ${value[0]} ${value[1]}"
                     }
                 }
                 if (responseNeeded) {
@@ -410,8 +368,7 @@ class MainActivity : AppCompatActivity() {
 
     //region Permissions and Settings management
     enum class AskType {
-        AskOnce,
-        InsistUntilSuccess
+        AskOnce, InsistUntilSuccess
     }
 
     private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
@@ -428,9 +385,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         permissionResultHandlers[requestCode]?.let { handler ->
@@ -484,8 +439,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun grantBluetoothPeripheralPermissions(
-        askType: AskType,
-        completion: (Boolean) -> Unit
+        askType: AskType, completion: (Boolean) -> Unit
     ) {
         val wantedPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_CONNECT,
