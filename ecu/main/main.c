@@ -255,32 +255,33 @@ void app_main() {
     lvgl_port_unlock();
   }
 
+  ESP_LOGI(TAG, "Initialize BLE");
   init_ble();
 
-  // while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
-  //   ESP_LOGI(TAG, "Wait for tachometer device...");
-  //   vTaskDelay(500 / portTICK_PERIOD_MS);
-  // }
-  // ESP_LOGI(TAG, "Tachometer device found!");
+  while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
+    ESP_LOGI(TAG, "Wait for tachometer device...");
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+  }
+  ESP_LOGI(TAG, "Tachometer device found!");
 
-  // while (true) {
-  //   int ret;
-  //   uint8_t *buffer = (uint8_t *)malloc(2);
-  //   ret = i2c_master_read_slave(I2C_NUM_0, (uint8_t *)buffer, 2);
+  while (true) {
+    int ret;
+    uint8_t *buffer = (uint8_t *)malloc(2);
+    ret = i2c_master_read_slave(I2C_NUM_0, (uint8_t *)buffer, 2);
 
-  //   if (ret == ESP_ERR_TIMEOUT) {
-  //     ESP_LOGW(TAG, "I2C Timeout\n");
-  //   } else if (ret == ESP_OK) {
-  //     if (lvgl_port_lock(-1)) {
-  //       uint16_t rpm = buffer[0] | (buffer[1] << 8);
-  //       lv_arc_set_value(indic, rpm);
-  //       lvgl_port_unlock();
-  //       // ESP_LOGI(TAG, "rpm: %d\n", rpm);
-  //     }
-  //   } else {
-  //     ESP_LOGI(TAG, "Master read slave error, IO not connected...\n");
-  //   }
+    if (ret == ESP_ERR_TIMEOUT) {
+      ESP_LOGW(TAG, "I2C Timeout\n");
+    } else if (ret == ESP_OK) {
+      if (lvgl_port_lock(-1)) {
+        uint16_t rpm = buffer[0] | (buffer[1] << 8);
+        lv_arc_set_value(indic, rpm);
+        lvgl_port_unlock();
+        // ESP_LOGI(TAG, "rpm: %d\n", rpm);
+      }
+    } else {
+      ESP_LOGI(TAG, "Master read slave error, IO not connected...\n");
+    }
 
-  // ESP_ERROR_CHECK(waveshare_twai_receive());
-  // }
+    ESP_ERROR_CHECK(waveshare_twai_receive());
+  }
 }
