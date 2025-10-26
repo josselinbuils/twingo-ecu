@@ -64,6 +64,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         appendLog("MainActivity.onCreate")
+        prepareAndStartAdvertising()
 
         switchAdvertising.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {

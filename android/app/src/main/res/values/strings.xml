@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">BLEProof Peripheral</string>
+    <string name="app_name">Twingo</string>
     <string name="text_static_is_advertising">Advertising</string>
     <string name="text_connected">Central connected</string>
     <string name="text_disconnected">Central not connected</string>
