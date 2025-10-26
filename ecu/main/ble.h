@@ -20,7 +20,7 @@
 #ifndef H_BLECENT_
 #define H_BLECENT_
 
-#include "esp_central.h"
+#include "external/esp_central.h"
 #include "modlog/modlog.h"
 
 #ifdef __cplusplus
