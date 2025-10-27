@@ -53,7 +53,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 
 void ble_store_config_init(void);
 
-void (*notification_callback)(const char *textid);
+void (*set_current_music_callback)(const char *textid);
 
 /**
  * Application callback.  Called when the attempt to subscribe to notifications
@@ -83,19 +83,26 @@ static int blecent_on_subscribe(
 }
 
 /**
- * Application callback.  Called when the write to the ANS Alert Notification
- * Control Point characteristic has completed.
+ * Application callback. Called when the read of the current music characteristic has completed.
  */
-static int blecent_on_write(
+static int blecent_on_read(
   uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
 ) {
-  MODLOG_DFLT(
-    INFO,
-    "Write complete; status=%d conn_handle=%d attr_handle=%d\n",
-    error->status,
-    conn_handle,
-    attr->handle
-  );
+  MODLOG_DFLT(INFO, "Read complete; status=%d conn_handle=%d", error->status, conn_handle);
+  if (error->status == 0) {
+    MODLOG_DFLT(INFO, " attr_handle=%d value=", attr->handle);
+    print_mbuf(attr->om);
+  }
+  MODLOG_DFLT(INFO, "\n");
+
+  int buffer_len = OS_MBUF_PKTLEN(attr->om);
+  char *str;
+  str = malloc(buffer_len + 1);
+  os_mbuf_copydata(attr->om, 0, buffer_len, str);
+  str[buffer_len] = '\0';
+  MODLOG_DFLT(INFO, "data: %s", str);
+  (*set_current_music_callback)(str);
+  free(str);
 
   /* Subscribe to notifications for the characteristic.
    * A central enables notifications by writing two bytes (1, 0) to the
@@ -110,7 +117,7 @@ static int blecent_on_write(
     peer, remote_svc_uuid, remote_chr_new_music_uuid, remote_cccd_new_music_uuid
   );
   if (dsc == NULL) {
-    MODLOG_DFLT(ERROR, "Error: peer lacks a CCCD for the new music characteristic");
+    MODLOG_DFLT(ERROR, "Error: peer lacks a descriptor for the new music characteristic");
     goto err;
   }
 
@@ -135,81 +142,19 @@ err:
   return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
 }
 
-/**
- * Application callback.  Called when the read of the ANS Supported New Alert
- * Category characteristic has completed.
- */
-static int blecent_on_read(
-  uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
-) {
-  MODLOG_DFLT(INFO, "Read complete; status=%d conn_handle=%d", error->status, conn_handle);
-  if (error->status == 0) {
-    MODLOG_DFLT(INFO, " attr_handle=%d value=", attr->handle);
-    print_mbuf(attr->om);
-  }
-  MODLOG_DFLT(INFO, "\n");
-
-  /* Write two bytes (99, 100) to the alert-notification-control-point
-   * characteristic.
-   */
-  const struct peer_chr *chr;
-  uint8_t value[2];
-  int rc;
-  const struct peer *peer = peer_find(conn_handle);
-
-  chr = peer_chr_find_uuid(peer, remote_svc_uuid, remote_chr_current_music_uuid);
-  if (chr == NULL) {
-    MODLOG_DFLT(
-      ERROR,
-      "Error: Peer doesn't support the Alert "
-      "Notification Control Point characteristic\n"
-    );
-    goto err;
-  }
-
-  value[0] = 99;
-  value[1] = 100;
-  rc = ble_gattc_write_flat(
-    conn_handle, chr->chr.val_handle, value, sizeof value, blecent_on_write, NULL
-  );
-  if (rc != 0) {
-    MODLOG_DFLT(ERROR, "Error: Failed to write characteristic; rc=%d\n", rc);
-    goto err;
-  }
-
-  return 0;
-err:
-  /* Terminate the connection. */
-  return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-}
-
-/**
- * Performs three GATT operations against the specified peer:
- * 1. Reads the ANS Supported New Alert Category characteristic.
- * 2. After read is completed, writes the ANS Alert Notification Control Point characteristic.
- * 3. After write is completed, subscribes to notifications for characteristic.
- *
- * If the peer does not support a required service, characteristic, or
- * descriptor, then the peer lied when it claimed support for the alert
- * notification service!  When this happens, or if a GATT procedure fails,
- * this function immediately terminates the connection.
- */
 static void blecent_read_write_subscribe(const struct peer *peer) {
   const struct peer_chr *chr;
   int rc;
 
-  /* Read the supported-new-alert-category characteristic. */
   chr = peer_chr_find_uuid(peer, remote_svc_uuid, remote_chr_current_music_uuid);
+
   if (chr == NULL) {
-    MODLOG_DFLT(
-      ERROR,
-      "Error: Peer doesn't support the Supported New "
-      "Alert Category characteristic\n"
-    );
+    MODLOG_DFLT(ERROR, "Error: Peer doesn't support the current music characteristic");
     goto err;
   }
 
   rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, blecent_on_read, NULL);
+
   if (rc != 0) {
     MODLOG_DFLT(ERROR, "Error: Failed to read characteristic; rc=%d\n", rc);
     goto err;
@@ -490,11 +435,9 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
       str[buffer_len] = '\0';
       MODLOG_DFLT(INFO, "data: %s", str);
-      (*notification_callback)(str);
+      (*set_current_music_callback)(str);
       free(str);
 
-      /* Attribute data is contained in event->notify_rx.om. Use
-       * `os_mbuf_copydata` to copy the data received in notification mbuf */
       return 0;
 
     case BLE_GAP_EVENT_MTU:
@@ -560,7 +503,7 @@ void init_ble(void (*callback)()) {
   }
   ESP_ERROR_CHECK(ret);
 
-  notification_callback = callback;
+  set_current_music_callback = callback;
 
   ret = nimble_port_init();
   if (ret != ESP_OK) {

@@ -263,7 +263,9 @@ void app_main() {
     // Add text
 
     label = lv_label_create(inner_scale);
-    lv_label_set_text(label, "Test");
+    lv_obj_set_height(label, 30);
+    lv_obj_set_width(label, 500);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
 
