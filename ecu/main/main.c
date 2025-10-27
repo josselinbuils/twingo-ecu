@@ -16,7 +16,7 @@
 
 const int BORDER_WIDTH = 5;
 const int INDICATOR_RANGE = 6000;
-const int INDICATOR_WIDTH = 40;
+const int INDICATOR_WIDTH = 44;
 const int LABELS_GAP = 30;
 const int PADDING = 10;
 const int SCALE_SIZE = 940;
@@ -287,7 +287,7 @@ void app_main() {
     lv_style_set_text_font(&label_style, &lv_font_montserrat_28);
     lv_obj_add_style(label, &label_style, 0);
 
-    // lv_arc_set_value(indic, 5500);
+    lv_arc_set_value(indic, 5500);
 
     lvgl_port_unlock();
   }

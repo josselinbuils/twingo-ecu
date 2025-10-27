@@ -37,14 +37,9 @@ static const ble_uuid_t *remote_chr_current_music_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x51, 0x46, 0x39, 0x39,
 );
 
-// The UUID of the new music chatacteristic.
-static const ble_uuid_t *remote_chr_new_music_uuid = BLE_UUID128_DECLARE(
-  0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x52, 0x46, 0x39, 0x39,
-);
-
 // The UUID of the music title CCCD.
-static const ble_uuid_t *remote_cccd_new_music_uuid = BLE_UUID128_DECLARE(
-  0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x53, 0x46, 0x39, 0x39,
+static const ble_uuid_t *remote_cccd_current_music_uuid = BLE_UUID128_DECLARE(
+  0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x52, 0x46, 0x39, 0x39,
 );
 
 static const char *TAG = "BLE";
@@ -82,49 +77,22 @@ static int blecent_on_subscribe(
   return 0;
 }
 
-/**
- * Application callback. Called when the read of the current music characteristic has completed.
+/* Subscribe to notifications for the characteristic.
+ * A central enables notifications by writing two bytes (1, 0) to the
+ * characteristic's client-characteristic-configuration-descriptor (CCCD).
  */
-static int blecent_on_read(
-  uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
-) {
-  MODLOG_DFLT(INFO, "Read complete; status=%d conn_handle=%d", error->status, conn_handle);
-  if (error->status == 0) {
-    MODLOG_DFLT(INFO, " attr_handle=%d value=", attr->handle);
-    print_mbuf(attr->om);
-  }
-  MODLOG_DFLT(INFO, "\n");
-
-  int buffer_len = OS_MBUF_PKTLEN(attr->om);
-  char *str;
-  str = malloc(buffer_len + 1);
-  os_mbuf_copydata(attr->om, 0, buffer_len, str);
-  str[buffer_len] = '\0';
-  MODLOG_DFLT(INFO, "data: %s", str);
-  (*set_current_music_callback)(str);
-  free(str);
-
-  /* Subscribe to notifications for the characteristic.
-   * A central enables notifications by writing two bytes (1, 0) to the
-   * characteristic's client-characteristic-configuration-descriptor (CCCD).
-   */
-  const struct peer_dsc *dsc;
-  uint8_t value[2];
-  int rc;
-  const struct peer *peer = peer_find(conn_handle);
-
-  dsc = peer_dsc_find_uuid(
-    peer, remote_svc_uuid, remote_chr_new_music_uuid, remote_cccd_new_music_uuid
+static int blecent_subscribe(const struct peer *peer) {
+  const struct peer_dsc *dsc = peer_dsc_find_uuid(
+    peer, remote_svc_uuid, remote_chr_current_music_uuid, remote_cccd_current_music_uuid
   );
   if (dsc == NULL) {
-    MODLOG_DFLT(ERROR, "Error: peer lacks a descriptor for the new music characteristic");
+    MODLOG_DFLT(ERROR, "Error: peer lacks a descriptor for the current music characteristic");
     goto err;
   }
 
-  value[0] = 1;
-  value[1] = 0;
-  rc = ble_gattc_write_flat(
-    conn_handle, dsc->dsc.handle, value, sizeof value, blecent_on_subscribe, NULL
+  uint8_t value[2] = {1, 0};
+  int rc = ble_gattc_write_flat(
+    peer->conn_handle, dsc->dsc.handle, value, sizeof value, blecent_on_subscribe, NULL
   );
   if (rc != 0) {
     MODLOG_DFLT(
@@ -142,35 +110,10 @@ err:
   return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
 }
 
-static void blecent_read_write_subscribe(const struct peer *peer) {
-  const struct peer_chr *chr;
-  int rc;
-
-  chr = peer_chr_find_uuid(peer, remote_svc_uuid, remote_chr_current_music_uuid);
-
-  if (chr == NULL) {
-    MODLOG_DFLT(ERROR, "Error: Peer doesn't support the current music characteristic");
-    goto err;
-  }
-
-  rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, blecent_on_read, NULL);
-
-  if (rc != 0) {
-    MODLOG_DFLT(ERROR, "Error: Failed to read characteristic; rc=%d\n", rc);
-    goto err;
-  }
-
-  return;
-err:
-  /* Terminate the connection. */
-  ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-}
-
 /**
  * Called when service discovery of the specified peer has completed.
  */
 static void blecent_on_disc_complete(const struct peer *peer, int status, void *arg) {
-
   if (status != 0) {
     /* Service discovery failed.  Terminate the connection. */
     MODLOG_DFLT(
@@ -196,10 +139,8 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
     peer->conn_handle
   );
 
-  /* Now perform three GATT procedures against the peer: read,
-   * write, and subscribe to notifications for the ANS service.
-   */
-  blecent_read_write_subscribe(peer);
+  // Subscribe to characteristic notifications.
+  blecent_subscribe(peer);
 }
 
 /**

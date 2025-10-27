@@ -3,7 +3,16 @@ package com.twingo
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.bluetooth.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
+import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -18,7 +27,7 @@ import android.media.session.MediaSessionManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.ParcelUuid
-import android.provider.Settings;
+import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.widget.EditText
@@ -28,18 +37,20 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.material.switchmaterial.SwitchMaterial
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 
 private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 
-private const val DESCRIPTOR_NEW_MUSIC_UUID = "39394653-8477-4ffa-bc10-dfef56583a29"
-private const val CHARACTERISTIC_CURRENT_MUSIC_UUID = "39394651-8477-4ffa-bc10-dfef56583a29"
-private const val CHARACTERISTIC_NEW_MUSIC_UUID = "39394652-8477-4ffa-bc10-dfef56583a29"
 private const val SERVICE_UUID = "39394650-8477-4ffa-bc10-dfef56583a29"
+private const val CHARACTERISTIC_CURRENT_MUSIC_UUID = "39394651-8477-4ffa-bc10-dfef56583a29"
+private const val DESCRIPTOR_CURRENT_MUSIC_UUID = "39394652-8477-4ffa-bc10-dfef56583a29"
 
 class MainActivity : AppCompatActivity() {
+    private val instance = this
     private val switchAdvertising: SwitchMaterial
         get() = findViewById(R.id.switchAdvertising)
     private val textViewLog: TextView
@@ -48,10 +59,8 @@ class MainActivity : AppCompatActivity() {
         get() = findViewById(R.id.scrollViewLog)
     private val textViewConnectionState: TextView
         get() = findViewById(R.id.textViewConnectionState)
-    private val editTextCharForRead: EditText
-        get() = findViewById(R.id.editTextCharForRead)
-    private val editTextCharForNotify: EditText
-        get() = findViewById(R.id.editTextCharForNotify)
+    private val editTextCurrentMusicCharacteristic: EditText
+        get() = findViewById(R.id.editTextCurrentMusicCharacteristic)
     private val textViewSubscribers: TextView
         get() = findViewById(R.id.textViewSubscribers)
 
@@ -102,40 +111,6 @@ class MainActivity : AppCompatActivity() {
                     bleStopAdvertising()
                 }
             }
-
-            val mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
-
-            val componentName = ComponentName(this, NotificationListener::class.java)
-
-            val controllers = mediaSessionManager.getActiveSessions(componentName)
-
-            if (controllers.isEmpty()) {
-                appendLog("NowPlaying: no media controller found")
-            }
-
-            for (controller in controllers) {
-                updateCurrentMusic(controller.metadata)
-
-                controller.registerCallback(object : MediaController.Callback() {
-                    override fun onMetadataChanged(metadata: MediaMetadata?) {
-                        updateCurrentMusic(metadata)
-                    }
-                })
-            }
-
-            mediaSessionManager.addOnActiveSessionsChangedListener(
-                {
-                    fun onActiveSessionsChanged(controllers: List<MediaController>?) {
-                        if (controllers != null && !controllers.isEmpty()) {
-                            for (controller in controllers) {
-                                updateCurrentMusic(controller.metadata)
-                            }
-                        } else {
-                            appendLog("NowPlaying: no media controller found")
-                        }
-                    }
-                }, componentName
-            )
         }
     }
 
@@ -145,9 +120,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun onTapSend(view: View) {
-        val text = editTextCharForNotify.text.toString()
+        val text = editTextCurrentMusicCharacteristic.text.toString()
         val data = text.toByteArray(Charsets.UTF_8)
-        sendNotification(CHARACTERISTIC_NEW_MUSIC_UUID, data)
+        sendNotification(CHARACTERISTIC_CURRENT_MUSIC_UUID, data)
     }
 
     fun onTapClearLog(view: View) {
@@ -199,7 +174,7 @@ class MainActivity : AppCompatActivity() {
                 currentMusic = music
 
                 sendNotification(
-                    CHARACTERISTIC_NEW_MUSIC_UUID, currentMusic.toByteArray(Charsets.UTF_8)
+                    CHARACTERISTIC_CURRENT_MUSIC_UUID, currentMusic.toByteArray(Charsets.UTF_8)
                 )
                 appendLog("NowPlaying: $music")
             }
@@ -207,7 +182,7 @@ class MainActivity : AppCompatActivity() {
             currentMusic = ""
 
             sendNotification(
-                CHARACTERISTIC_NEW_MUSIC_UUID, "".toByteArray(Charsets.UTF_8)
+                CHARACTERISTIC_CURRENT_MUSIC_UUID, "".toByteArray(Charsets.UTF_8)
             )
             appendLog("NowPlaying: none")
         }
@@ -250,24 +225,18 @@ class MainActivity : AppCompatActivity() {
         val service = BluetoothGattService(
             UUID.fromString(SERVICE_UUID), BluetoothGattService.SERVICE_TYPE_PRIMARY
         )
-        val charForRead = BluetoothGattCharacteristic(
+        val currentMusicCharacteristic = BluetoothGattCharacteristic(
             UUID.fromString(CHARACTERISTIC_CURRENT_MUSIC_UUID),
-            BluetoothGattCharacteristic.PROPERTY_READ,
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
-        val charForNotify = BluetoothGattCharacteristic(
-            UUID.fromString(CHARACTERISTIC_NEW_MUSIC_UUID),
-            BluetoothGattCharacteristic.PROPERTY_INDICATE,
-            BluetoothGattCharacteristic.PERMISSION_READ
-        )
-        val charConfigDescriptor = BluetoothGattDescriptor(
-            UUID.fromString(DESCRIPTOR_NEW_MUSIC_UUID),
+        val currentMusicDescriptor = BluetoothGattDescriptor(
+            UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID),
             BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
         )
-        charForNotify.addDescriptor(charConfigDescriptor)
+        currentMusicCharacteristic.addDescriptor(currentMusicDescriptor)
 
-        service.addCharacteristic(charForRead)
-        service.addCharacteristic(charForNotify)
+        service.addCharacteristic(currentMusicCharacteristic)
 
         val result = gattServer.addService(service)
         this.gattServer = gattServer
@@ -410,7 +379,7 @@ class MainActivity : AppCompatActivity() {
             descriptor: BluetoothGattDescriptor
         ) {
             var log = "onDescriptorReadRequest"
-            if (descriptor.uuid == UUID.fromString(DESCRIPTOR_NEW_MUSIC_UUID)) {
+            if (descriptor.uuid == UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID)) {
                 val returnValue = if (subscribedDevices.contains(device)) {
                     log += " DESCRIPTOR response=ENABLE_NOTIFICATION"
                     BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
@@ -438,13 +407,56 @@ class MainActivity : AppCompatActivity() {
             value: ByteArray
         ) {
             var strLog = "onDescriptorWriteRequest"
-            if (descriptor.uuid == UUID.fromString(DESCRIPTOR_NEW_MUSIC_UUID)) {
+            val self = this
+
+            if (descriptor.uuid == UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID)) {
                 var status = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED
-                if (descriptor.characteristic.uuid == UUID.fromString(CHARACTERISTIC_NEW_MUSIC_UUID)) {
+                if (descriptor.characteristic.uuid == UUID.fromString(
+                        CHARACTERISTIC_CURRENT_MUSIC_UUID
+                    )
+                ) {
                     if (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
                         subscribedDevices.add(device)
                         status = BluetoothGatt.GATT_SUCCESS
                         strLog += ", subscribed"
+
+                        val mediaSessionManager =
+                            getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
+
+                        val componentName =
+                            ComponentName(instance, NotificationListener::class.java)
+
+                        val controllers = mediaSessionManager.getActiveSessions(componentName)
+
+                        if (controllers.isEmpty()) {
+                            appendLog("NowPlaying: no media controller found")
+                            updateCurrentMusic(null)
+                        }
+
+                        for (controller in controllers) {
+                            updateCurrentMusic(controller.metadata)
+
+                            controller.registerCallback(object : MediaController.Callback() {
+                                override fun onMetadataChanged(metadata: MediaMetadata?) {
+                                    updateCurrentMusic(metadata)
+                                }
+                            })
+                        }
+
+                        mediaSessionManager.addOnActiveSessionsChangedListener(
+                            {
+                                fun onActiveSessionsChanged(controllers: List<MediaController>?) {
+                                    if (controllers != null && !controllers.isEmpty()) {
+                                        for (controller in controllers) {
+                                            updateCurrentMusic(controller.metadata)
+                                        }
+                                    } else {
+                                        appendLog("NowPlaying: no media controller found")
+                                        updateCurrentMusic(null)
+                                    }
+                                }
+                            }, componentName
+                        )
                     } else if (value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
                         subscribedDevices.remove(device)
                         status = BluetoothGatt.GATT_SUCCESS
