@@ -80,7 +80,17 @@ void set_label_text(const char *text) {
   ESP_LOGI(TAG, "Set label text: %s", text);
 
   if (lvgl_port_lock(-1)) {
-    lv_label_set_text(label, text);
+    if (strlen(text) > 0) {
+      char str[strlen(LV_SYMBOL_AUDIO) + 2 + strlen(text)];
+
+      strcpy(str, LV_SYMBOL_AUDIO);
+      strcat(str, "  ");
+      strcat(str, text);
+
+      lv_label_set_text(label, str);
+    } else {
+      lv_label_set_text(label, "");
+    }
     lvgl_port_unlock();
   }
 }
@@ -197,7 +207,7 @@ void app_main() {
     lv_scale_set_section_style_items(inner_scale, main_section, &tick_style);
     lv_scale_set_section_style_indicator(inner_scale, main_section, &tick_style);
 
-    static char *labels[7] = {"0", "1", "2", "3", "4", "5", "6", NULL};
+    static const char *labels[8] = {"0", "1", "2", "3", "4", "5", "6", NULL};
 
     lv_scale_set_label_show(inner_scale, true);
     lv_scale_set_text_src(inner_scale, labels);

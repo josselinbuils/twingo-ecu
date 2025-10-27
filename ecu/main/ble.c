@@ -53,7 +53,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 
 void ble_store_config_init(void);
 
-void (*set_current_music_callback)(const char *textid);
+void (*set_current_music_callback)(const char *current_music);
 
 /**
  * Application callback.  Called when the attempt to subscribe to notifications
