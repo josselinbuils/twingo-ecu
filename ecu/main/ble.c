@@ -27,22 +27,22 @@
 #include "nimble/nimble_port_freertos.h"
 #include "services/gap/ble_svc_gap.h"
 
-// The UUID of the service containing the subscribable characteristic.
+#define TAG "BLE"
+
+// The UUID of the service containing the subscribable characteristic
 static const ble_uuid_t *remote_svc_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x50, 0x46, 0x39, 0x39,
 ); // 39394651-8477-4ffa-bc10-dfef56583a29
 
-// The UUID of the current music chatacteristic.
+// The UUID of the current music chatacteristic
 static const ble_uuid_t *remote_chr_current_music_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x51, 0x46, 0x39, 0x39,
 );
 
-// The UUID of the music title CCCD.
+// The UUID of the music title CCCD
 static const ble_uuid_t *remote_cccd_current_music_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x52, 0x46, 0x39, 0x39,
 );
-
-static const char *TAG = "BLE";
 
 static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 
@@ -59,10 +59,9 @@ static int blecent_on_subscribe(
 ) {
   struct peer *peer;
 
-  MODLOG_DFLT(
-    INFO,
-    "Subscribe complete; status=%d conn_handle=%d "
-    "attr_handle=%d\n",
+  ESP_LOGI(
+    TAG,
+    "Subscribe complete; status=%d conn_handle=%d attr_handle=%d",
     error->status,
     conn_handle,
     attr->handle
@@ -70,7 +69,7 @@ static int blecent_on_subscribe(
 
   peer = peer_find(conn_handle);
   if (peer == NULL) {
-    MODLOG_DFLT(ERROR, "peer not found, aborting...");
+    ESP_LOGE(TAG, "Peer not found, aborting...");
     ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
   }
 
@@ -86,27 +85,24 @@ static int blecent_subscribe(const struct peer *peer) {
     peer, remote_svc_uuid, remote_chr_current_music_uuid, remote_cccd_current_music_uuid
   );
   if (dsc == NULL) {
-    MODLOG_DFLT(ERROR, "Error: peer lacks a descriptor for the current music characteristic");
+    ESP_LOGE(TAG, "Peer lacks a descriptor for the current music characteristic");
     goto err;
   }
 
   uint8_t value[2] = {1, 0};
+
   int rc = ble_gattc_write_flat(
     peer->conn_handle, dsc->dsc.handle, value, sizeof value, blecent_on_subscribe, NULL
   );
+
   if (rc != 0) {
-    MODLOG_DFLT(
-      ERROR,
-      "Error: Failed to subscribe to characteristic; "
-      "rc=%d\n",
-      rc
-    );
+    ESP_LOGD(TAG, "Failed to subscribe to characteristic; rc=%d", rc);
     goto err;
   }
 
   return 0;
 err:
-  /* Terminate the connection. */
+  // Terminate the connection
   return ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
 }
 
@@ -115,13 +111,9 @@ err:
  */
 static void blecent_on_disc_complete(const struct peer *peer, int status, void *arg) {
   if (status != 0) {
-    /* Service discovery failed.  Terminate the connection. */
-    MODLOG_DFLT(
-      ERROR,
-      "Error: Service discovery failed; status=%d "
-      "conn_handle=%d\n",
-      status,
-      peer->conn_handle
+    // Service discovery failed  Terminate the connection
+    ESP_LOGE(
+      TAG, "Service discovery failed; status=%d conn_handle=%d\n", status, peer->conn_handle
     );
     ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
     return;
@@ -131,15 +123,11 @@ static void blecent_on_disc_complete(const struct peer *peer, int status, void *
    * list of services, characteristics, and descriptors that the peer
    * supports.
    */
-  MODLOG_DFLT(
-    INFO,
-    "Service discovery complete; status=%d "
-    "conn_handle=%d\n",
-    status,
-    peer->conn_handle
+  ESP_LOGI(
+    TAG, "Service discovery complete; status=%d conn_handle=%d\n", status, peer->conn_handle
   );
 
-  // Subscribe to characteristic notifications.
+  // Subscribe to characteristic notifications
   blecent_subscribe(peer);
 }
 
@@ -151,10 +139,10 @@ static void blecent_scan(void) {
   struct ble_gap_disc_params disc_params = {0};
   int rc;
 
-  /* Figure out address to use while advertising (no privacy for now) */
+  // Figure out address to use while advertising (no privacy for now)
   rc = ble_hs_id_infer_auto(0, &own_addr_type);
   if (rc != 0) {
-    MODLOG_DFLT(ERROR, "error determining address type; rc=%d\n", rc);
+    ESP_LOGE(TAG, "Error determining address type; rc=%d\n", rc);
     return;
   }
 
@@ -169,7 +157,7 @@ static void blecent_scan(void) {
    */
   disc_params.passive = 1;
 
-  /* Use defaults for the rest of the parameters. */
+  // Use defaults for the rest of the parameters
   disc_params.itvl = 0;
   disc_params.window = 0;
   disc_params.filter_policy = 0;
@@ -177,7 +165,7 @@ static void blecent_scan(void) {
 
   rc = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &disc_params, blecent_gap_event, NULL);
   if (rc != 0) {
-    MODLOG_DFLT(ERROR, "Error initiating GAP discovery procedure; rc=%d\n", rc);
+    ESP_LOGE(TAG, "Error initiating GAP discovery procedure; rc=%d\n", rc);
   }
 }
 
@@ -194,7 +182,7 @@ static int blecent_should_connect(const struct ble_gap_disc_desc *disc) {
 
   memset(peer_addr, 0x0, sizeof peer_addr);
 
-  /* The device has to be advertising connectability. */
+  // The device has to be advertising connectability
   if (disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_ADV_IND &&
       disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_DIR_IND) {
     return 0;
@@ -223,26 +211,26 @@ static void blecent_connect_if_interesting(void *disc) {
   int rc;
   ble_addr_t *addr;
 
-  /* Don't do anything if we don't care about this advertiser. */
+  // Don't do anything if we don't care about this advertiser
   if (!blecent_should_connect((struct ble_gap_disc_desc *)disc)) {
     return;
   }
 
-  MODLOG_DFLT(DEBUG, "Connect to device...");
+  ESP_LOGD(TAG, "Connect to device...");
 
 #if !(MYNEWT_VAL(BLE_HOST_ALLOW_CONNECT_WITH_SCAN))
-  /* Scanning must be stopped before a connection can be initiated. */
+  // Scanning must be stopped before a connection can be initiated
   rc = ble_gap_disc_cancel();
   if (rc != 0) {
-    MODLOG_DFLT(DEBUG, "Failed to cancel scan; rc=%d\n", rc);
+    ESP_LOGD(TAG, "Failed to cancel scan; rc=%d\n", rc);
     return;
   }
 #endif
 
-  /* Figure out address to use for connect (no privacy for now) */
+  // Figure out address to use for connect (no privacy for now)
   rc = ble_hs_id_infer_auto(0, &own_addr_type);
   if (rc != 0) {
-    MODLOG_DFLT(ERROR, "error determining address type; rc=%d\n", rc);
+    ESP_LOGE(TAG, "Error determining address type; rc=%d\n", rc);
     return;
   }
 
@@ -252,11 +240,11 @@ static void blecent_connect_if_interesting(void *disc) {
   addr = &((struct ble_gap_disc_desc *)disc)->addr;
 
   rc = ble_gap_connect(own_addr_type, addr, 30000, NULL, blecent_gap_event, NULL);
+
   if (rc != 0) {
-    MODLOG_DFLT(
-      ERROR,
-      "Error: Failed to connect to device; addr_type=%d "
-      "addr=%s; rc=%d\n",
+    ESP_LOGE(
+      TAG,
+      "Failed to connect to device; addr_type=%d addr=%s; rc=%d\n",
       addr->type,
       addr_str(addr->val),
       rc
@@ -291,65 +279,69 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         return 0;
       }
 
-      /* An advertisement report was received during GAP discovery. */
+      // An advertisement report was received during GAP discovery
       print_adv_fields(&fields);
 
-      /* Try to connect to the advertiser if it looks interesting. */
+      // Try to connect to the advertiser if it looks interesting
       blecent_connect_if_interesting(&event->disc);
       return 0;
 
     case BLE_GAP_EVENT_CONNECT:
-      /* A new connection was established or a connection attempt failed. */
+      // A new connection was established or a connection attempt failed
       if (event->connect.status == 0) {
-        /* Connection successfully established. */
-        MODLOG_DFLT(INFO, "Connection established ");
+        ESP_LOGI(TAG, "Connection established");
+
+        rc = ble_gattc_exchange_mtu(event->connect.conn_handle, NULL, NULL);
+
+        if (rc != 0) {
+          ESP_LOGE(TAG, "Failed to negotiate MTU; rc = %d", rc);
+        }
 
         rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
         assert(rc == 0);
         print_conn_desc(&desc);
-        MODLOG_DFLT(INFO, "\n");
 
-        /* Remember peer. */
+        // Remember peer
         rc = peer_add(event->connect.conn_handle);
         if (rc != 0) {
-          MODLOG_DFLT(ERROR, "Failed to add peer; rc=%d\n", rc);
+          ESP_LOGE(TAG, "Failed to add peer; rc=%d\n", rc);
           return 0;
         }
 
-        /* Perform service discovery */
+        // Perform service discovery
         rc = peer_disc_all(event->connect.conn_handle, blecent_on_disc_complete, NULL);
         if (rc != 0) {
-          MODLOG_DFLT(ERROR, "Failed to discover services; rc=%d\n", rc);
+          ESP_LOGE(TAG, "Failed to discover services; rc=%d\n", rc);
           return 0;
         }
       } else {
-        /* Connection attempt failed; resume scanning. */
-        MODLOG_DFLT(ERROR, "Error: Connection failed; status=%d\n", event->connect.status);
+        // Connection attempt failed; resume scanning
+        ESP_LOGE(TAG, "Connection failed; status=%d\n", event->connect.status);
         blecent_scan();
       }
 
       return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
-      /* Connection terminated. */
-      MODLOG_DFLT(INFO, "disconnect; reason=%d ", event->disconnect.reason);
+      // Connection terminated
+      ESP_LOGI(TAG, "Disconnect; reason=%d ", event->disconnect.reason);
       print_conn_desc(&event->disconnect.conn);
-      MODLOG_DFLT(INFO, "\n");
+      ESP_LOGI(TAG, "\n");
 
-      /* Forget about peer. */
+      // Forget about peer
       peer_delete(event->disconnect.conn.conn_handle);
 
-      /* Resume scanning. */
+      // Resume scanning
       blecent_scan();
       return 0;
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
-      MODLOG_DFLT(INFO, "discovery complete; reason=%d\n", event->disc_complete.reason);
+      ESP_LOGI(TAG, "Discovery complete; reason=%d\n", event->disc_complete.reason);
       return 0;
 
     case BLE_GAP_EVENT_ENC_CHANGE:
-      /* Encryption has been enabled or disabled for this connection. */
-      MODLOG_DFLT(INFO, "encryption change event; status=%d ", event->enc_change.status);
+      // Encryption has been enabled or disabled for this connection
+      ESP_LOGI(TAG, "Encryption change event; status=%d ", event->enc_change.status);
       rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
       assert(rc == 0);
       print_conn_desc(&desc);
@@ -358,11 +350,10 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
     case BLE_GAP_EVENT_NOTIFY_RX:
       int buffer_len = OS_MBUF_PKTLEN(event->notify_rx.om);
 
-      /* Peer sent us a notification or indication. */
-      MODLOG_DFLT(
-        INFO,
-        "received %s; conn_handle=%d attr_handle=%d "
-        "attr_len=%d\n",
+      // Peer sent us a notification or indication
+      ESP_LOGI(
+        TAG,
+        "Received %s; conn_handle=%d attr_handle=%d attr_len=%d\n",
         event->notify_rx.indication ? "indication" : "notification",
         event->notify_rx.conn_handle,
         event->notify_rx.attr_handle,
@@ -372,7 +363,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       struct peer *peer = peer_find(event->notify_rx.conn_handle);
 
       if (peer == NULL) {
-        MODLOG_DFLT(ERROR, "peer not found, aborting...");
+        ESP_LOGE(TAG, "Peer not found, aborting...");
         ble_gap_terminate(event->notify_rx.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
         return 0;
       }
@@ -384,16 +375,16 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         str = malloc(buffer_len + 1);
         os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
         str[buffer_len] = '\0';
-        MODLOG_DFLT(INFO, "data: %s", str);
+        ESP_LOGI(TAG, "Current music received: %s", str);
         (*set_current_music_callback)(str);
         free(str);
       }
       return 0;
 
     case BLE_GAP_EVENT_MTU:
-      MODLOG_DFLT(
-        INFO,
-        "mtu update event; conn_handle=%d cid=%d mtu=%d\n",
+      ESP_LOGI(
+        TAG,
+        "MTU update event; conn_handle=%d cid=%d mtu=%d\n",
         event->mtu.conn_handle,
         event->mtu.channel_id,
         event->mtu.value
@@ -406,7 +397,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
        * convenience: just throw away the old bond and accept the new link.
        */
 
-      /* Delete the old bond. */
+      // Delete the old bond
       rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
       assert(rc == 0);
       ble_store_util_delete_peer(&desc.peer_id_addr);
@@ -422,30 +413,30 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
 }
 
 static void blecent_on_reset(int reason) {
-  MODLOG_DFLT(ERROR, "Resetting state; reason=%d\n", reason);
+  ESP_LOGE(TAG, "Resetting state; reason=%d\n", reason);
 }
 
 static void blecent_on_sync(void) {
   int rc;
 
-  /* Make sure we have proper identity address set (public preferred) */
+  // Make sure we have proper identity address set (public preferred)
   rc = ble_hs_util_ensure_addr(0);
   assert(rc == 0);
 
-  /* Begin scanning for a peripheral to connect to. */
+  // Begin scanning for a peripheral to connect to
   blecent_scan();
 }
 
 void blecent_host_task(void *param) {
   ESP_LOGI(TAG, "BLE Host Task Started");
-  /* This function will return only when nimble_port_stop() is executed */
+  // This function will return only when nimble_port_stop() is executed
   nimble_port_run();
 
   nimble_port_freertos_deinit();
 }
 
 void init_ble(void (*callback)()) {
-  /* Initialize NVS — it is used to store PHY calibration data */
+  // Initialize NVS — it is used to store PHY calibration data
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
     ESP_ERROR_CHECK(nvs_flash_erase());
@@ -461,17 +452,17 @@ void init_ble(void (*callback)()) {
     return;
   }
 
-  /* Configure the host. */
+  // Configure the host
   ble_hs_cfg.reset_cb = blecent_on_reset;
   ble_hs_cfg.sync_cb = blecent_on_sync;
   ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
   int rc;
-  /* Initialize data structures to track connected peers. */
+  // Initialize data structures to track connected peers
   rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 64, 64, 64);
   assert(rc == 0);
 
-  /* XXX Need to have template for store */
+  // XXX Need to have template for store
   ble_store_config_init();
 
   nimble_port_freertos_init(blecent_host_task);

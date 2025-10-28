@@ -1,6 +1,6 @@
 #include "lcd.h"
 
-static const char *TAG = "LCD";
+#define TAG "LCD"
 
 static esp_lcd_panel_handle_t lcd_panel = NULL;
 static esp_lcd_touch_handle_t touch_handle = NULL;

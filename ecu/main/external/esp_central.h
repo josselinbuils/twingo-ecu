@@ -8,7 +8,6 @@
 #define H_ESP_CENTRAL_
 
 #include "host/ble_hs.h"
-#include "modlog/modlog.h"
 
 #define PEER_ADDR_VAL_SIZE 6
 
