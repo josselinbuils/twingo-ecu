@@ -407,10 +407,10 @@ class MainActivity : AppCompatActivity() {
             value: ByteArray
         ) {
             var strLog = "onDescriptorWriteRequest"
-            val self = this
 
             if (descriptor.uuid == UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID)) {
                 var status = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED
+
                 if (descriptor.characteristic.uuid == UUID.fromString(
                         CHARACTERISTIC_CURRENT_MUSIC_UUID
                     )
@@ -419,6 +419,12 @@ class MainActivity : AppCompatActivity() {
                         subscribedDevices.add(device)
                         status = BluetoothGatt.GATT_SUCCESS
                         strLog += ", subscribed"
+                        appendLog(strLog)
+
+                        if (responseNeeded) {
+                            gattServer?.sendResponse(device, requestId, status, 0, null)
+                        }
+                        updateSubscribersUI()
 
                         val mediaSessionManager =
                             getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
@@ -429,7 +435,7 @@ class MainActivity : AppCompatActivity() {
                         val controllers = mediaSessionManager.getActiveSessions(componentName)
 
                         if (controllers.isEmpty()) {
-                            appendLog("NowPlaying: no media controller found")
+                            appendLog("NowPlaying: no media controller found (0)")
                             updateCurrentMusic(null)
                         }
 
@@ -443,15 +449,24 @@ class MainActivity : AppCompatActivity() {
                             })
                         }
 
+                        mediaSessionManager.addOnActiveSessionsChangedListener(object :
+                            MediaSessionManager.OnActiveSessionsChangedListener {
+                            override fun onActiveSessionsChanged(activeSessions: List<MediaController>?) {
+                                appendLog("onActiveSessionsChanged() 0")
+                            }
+                        }, componentName)
+
                         mediaSessionManager.addOnActiveSessionsChangedListener(
                             {
                                 fun onActiveSessionsChanged(controllers: List<MediaController>?) {
+                                    appendLog("onActiveSessionsChanged() 1")
+
                                     if (controllers != null && !controllers.isEmpty()) {
                                         for (controller in controllers) {
                                             updateCurrentMusic(controller.metadata)
                                         }
                                     } else {
-                                        appendLog("NowPlaying: no media controller found")
+                                        appendLog("NowPlaying: no media controller found (1)")
                                         updateCurrentMusic(null)
                                     }
                                 }
@@ -461,21 +476,27 @@ class MainActivity : AppCompatActivity() {
                         subscribedDevices.remove(device)
                         status = BluetoothGatt.GATT_SUCCESS
                         strLog += ", unsubscribed"
+                        appendLog(strLog)
+
+                        if (responseNeeded) {
+                            gattServer?.sendResponse(device, requestId, status, 0, null)
+                        }
+                        updateSubscribersUI()
                     } else {
                         strLog += ", unknown status: ${value[0]} ${value[1]}"
+                        appendLog(strLog)
                     }
                 }
-                if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, status, 0, null)
-                }
-                updateSubscribersUI()
             } else {
                 strLog += " unknown uuid=${descriptor.uuid}"
+                appendLog(strLog)
+
                 if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                    gattServer?.sendResponse(
+                        device, requestId, BluetoothGatt.GATT_FAILURE, 0, null
+                    )
                 }
             }
-            appendLog(strLog)
         }
     }
 
