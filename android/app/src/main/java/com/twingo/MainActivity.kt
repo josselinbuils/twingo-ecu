@@ -171,12 +171,11 @@ class MainActivity : AppCompatActivity() {
         if (metadata != null) {
             val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
             val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
-            val music = "$artist - $title"
+            val music = Normalizer.normalize("$artist - $title", Normalizer.Form.NFD)
+                .replace("\\p{Mn}+".toRegex(), "") // Removes accents
 
             if (currentMusic != music) {
-                // Removes accents
-                currentMusic = Normalizer.normalize(music, Normalizer.Form.NFD)
-                    .replace("\\p{Mn}+".toRegex(), "")
+                currentMusic = music
 
                 sendNotification(
                     CHARACTERISTIC_CURRENT_MUSIC_UUID, currentMusic.toByteArray(Charsets.UTF_8)
