@@ -67,11 +67,10 @@ static int blecent_on_subscribe(
     conn_handle,
     attr->handle
   );
-  current_music_attr_handle = attr->handle;
 
   peer = peer_find(conn_handle);
   if (peer == NULL) {
-    MODLOG_DFLT(ERROR, "Error in finding peer, aborting...");
+    MODLOG_DFLT(ERROR, "peer not found, aborting...");
     ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
   }
 
@@ -371,9 +370,16 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       );
 
       struct peer *peer = peer_find(event->notify_rx.conn_handle);
+
+      if (peer == NULL) {
+        MODLOG_DFLT(ERROR, "peer not found, aborting...");
+        ble_gap_terminate(event->notify_rx.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        return 0;
+      }
+
       struct peer_chr *chr = peer_chr_find(peer->cur_svc, event->notify_rx.attr_handle, NULL);
 
-      if (ble_uuid_cmp(&chr->chr.uuid.u, remote_chr_current_music_uuid) == 0) {
+      if (chr != NULL && ble_uuid_cmp(&chr->chr.uuid.u, remote_chr_current_music_uuid) == 0) {
         char *str;
         str = malloc(buffer_len + 1);
         os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
