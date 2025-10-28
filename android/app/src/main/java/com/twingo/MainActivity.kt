@@ -36,6 +36,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.google.android.material.switchmaterial.SwitchMaterial
+import java.text.Normalizer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -173,12 +174,13 @@ class MainActivity : AppCompatActivity() {
             val music = "$artist - $title"
 
             if (currentMusic != music) {
-                currentMusic = music
+                // Removes accents
+                currentMusic = Normalizer.normalize(music, Normalizer.Form.NFD)
+                    .replace("\\p{Mn}+".toRegex(), "")
 
                 sendNotification(
                     CHARACTERISTIC_CURRENT_MUSIC_UUID, currentMusic.toByteArray(Charsets.UTF_8)
                 )
-                appendLog("NowPlaying: $music")
             }
         } else if (currentMusic != "") {
             currentMusic = ""
@@ -186,7 +188,6 @@ class MainActivity : AppCompatActivity() {
             sendNotification(
                 CHARACTERISTIC_CURRENT_MUSIC_UUID, "".toByteArray(Charsets.UTF_8)
             )
-            appendLog("NowPlaying: none")
         }
     }
 
@@ -438,13 +439,16 @@ class MainActivity : AppCompatActivity() {
                             if (controller != null) {
                                 updateCurrentMusic(controller.metadata)
 
-                                controller.registerCallback(object : MediaController.Callback() {
-                                    override fun onMetadataChanged(metadata: MediaMetadata?) {
-                                        updateCurrentMusic(metadata)
-                                    }
-                                })
+                                runOnUiThread {
+                                    controller.registerCallback(object :
+                                        MediaController.Callback() {
+                                        override fun onMetadataChanged(metadata: MediaMetadata?) {
+                                            updateCurrentMusic(metadata)
+                                        }
+                                    })
+                                }
                             } else {
-                                appendLog("NowPlaying: no media controller found (0)")
+                                appendLog("No media controller found")
                                 updateCurrentMusic(null)
                             }
                         }
@@ -456,7 +460,10 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread {
                             mediaSessionManager.addOnActiveSessionsChangedListener(
                                 { controllers ->
-                                    updateCurrentMusicFromController(controllers?.getOrNull(0))
+                                    if (controllers?.getOrNull(0) != null) {
+                                        appendLog("New media session")
+                                        updateCurrentMusicFromController(controllers.get(0))
+                                    }
                                 }, componentName
                             )
                         }
