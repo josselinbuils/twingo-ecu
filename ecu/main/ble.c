@@ -67,6 +67,7 @@ static int blecent_on_subscribe(
     conn_handle,
     attr->handle
   );
+  current_music_attr_handle = attr->handle;
 
   peer = peer_find(conn_handle);
   if (peer == NULL) {
@@ -206,8 +207,6 @@ static int blecent_should_connect(const struct ble_gap_disc_desc *disc) {
   }
 
   for (i = 0; i < fields.num_uuids128; i++) {
-    print_uuid(&fields.uuids128[i].u);
-    print_uuid(remote_svc_uuid);
     if (ble_uuid_cmp(&fields.uuids128[i].u, remote_svc_uuid) == 0) {
       return 1;
     }
@@ -371,14 +370,18 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         buffer_len
       );
 
-      char *str;
-      str = malloc(buffer_len + 1);
-      os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
-      str[buffer_len] = '\0';
-      MODLOG_DFLT(INFO, "data: %s", str);
-      (*set_current_music_callback)(str);
-      free(str);
+      struct peer *peer = peer_find(event->notify_rx.conn_handle);
+      struct peer_chr *chr = peer_chr_find(peer->cur_svc, event->notify_rx.attr_handle, NULL);
 
+      if (ble_uuid_cmp(&chr->chr.uuid.u, remote_chr_current_music_uuid) == 0) {
+        char *str;
+        str = malloc(buffer_len + 1);
+        os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
+        str[buffer_len] = '\0';
+        MODLOG_DFLT(INFO, "data: %s", str);
+        (*set_current_music_callback)(str);
+        free(str);
+      }
       return 0;
 
     case BLE_GAP_EVENT_MTU:

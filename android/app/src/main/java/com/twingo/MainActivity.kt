@@ -119,12 +119,14 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    @Suppress("unused")
     fun onTapSend(view: View) {
         val text = editTextCurrentMusicCharacteristic.text.toString()
         val data = text.toByteArray(Charsets.UTF_8)
         sendNotification(CHARACTERISTIC_CURRENT_MUSIC_UUID, data)
     }
 
+    @Suppress("unused")
     fun onTapClearLog(view: View) {
         textViewLog.text = ""
         appendLog("Logs cleared")
@@ -151,16 +153,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sendNotification(uuid: String, data: ByteArray) {
+        if (subscribedDevice == null) {
+            return
+        }
         val characteristic = gattServer?.getService(UUID.fromString(SERVICE_UUID))
             ?.getCharacteristic(UUID.fromString(uuid))
 
         characteristic?.let {
             it.value = data
-
-            for (device in subscribedDevices) {
-                appendLog("Sending notification: ${data.toString(Charsets.UTF_8)}")
-                gattServer?.notifyCharacteristicChanged(device, it, false)
-            }
+            appendLog("Sending notification: ${data.toString(Charsets.UTF_8)}")
+            gattServer?.notifyCharacteristicChanged(subscribedDevice, it, false)
         }
     }
 
@@ -189,9 +191,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSubscribersUI() {
-        val strSubscribers = "${subscribedDevices.count()} subscribers"
         runOnUiThread {
-            textViewSubscribers.text = strSubscribers
+            textViewSubscribers.text = if (subscribedDevice !== null) "subscribed" else ""
         }
     }
 
@@ -258,7 +259,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val bluetoothManager: BluetoothManager by lazy {
-        getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
     }
 
     private val bluetoothAdapter: BluetoothAdapter by lazy {
@@ -301,7 +302,7 @@ class MainActivity : AppCompatActivity() {
 
     //region BLE GATT server
     private var gattServer: BluetoothGattServer? = null
-    private val subscribedDevices = mutableSetOf<BluetoothDevice>()
+    private var subscribedDevice: BluetoothDevice? = null
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
@@ -312,8 +313,9 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     textViewConnectionState.text = getString(R.string.text_disconnected)
                     appendLog("Central did disconnect")
-                    subscribedDevices.remove(device)
+                    subscribedDevice = null
                     updateSubscribersUI()
+                    updateCurrentMusic(null)
                 }
             }
         }
@@ -380,7 +382,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             var log = "onDescriptorReadRequest"
             if (descriptor.uuid == UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID)) {
-                val returnValue = if (subscribedDevices.contains(device)) {
+                val returnValue = if (subscribedDevice != null) {
                     log += " DESCRIPTOR response=ENABLE_NOTIFICATION"
                     BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 } else {
@@ -416,7 +418,7 @@ class MainActivity : AppCompatActivity() {
                     )
                 ) {
                     if (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
-                        subscribedDevices.add(device)
+                        subscribedDevice = device
                         status = BluetoothGatt.GATT_SUCCESS
                         strLog += ", subscribed"
                         appendLog(strLog)
@@ -432,48 +434,36 @@ class MainActivity : AppCompatActivity() {
                         val componentName =
                             ComponentName(instance, NotificationListener::class.java)
 
-                        val controllers = mediaSessionManager.getActiveSessions(componentName)
+                        val updateCurrentMusicFromController = { controller: MediaController? ->
+                            if (controller != null) {
+                                updateCurrentMusic(controller.metadata)
 
-                        if (controllers.isEmpty()) {
-                            appendLog("NowPlaying: no media controller found (0)")
-                            updateCurrentMusic(null)
-                        }
-
-                        for (controller in controllers) {
-                            updateCurrentMusic(controller.metadata)
-
-                            controller.registerCallback(object : MediaController.Callback() {
-                                override fun onMetadataChanged(metadata: MediaMetadata?) {
-                                    updateCurrentMusic(metadata)
-                                }
-                            })
-                        }
-
-                        mediaSessionManager.addOnActiveSessionsChangedListener(object :
-                            MediaSessionManager.OnActiveSessionsChangedListener {
-                            override fun onActiveSessionsChanged(activeSessions: List<MediaController>?) {
-                                appendLog("onActiveSessionsChanged() 0")
-                            }
-                        }, componentName)
-
-                        mediaSessionManager.addOnActiveSessionsChangedListener(
-                            {
-                                fun onActiveSessionsChanged(controllers: List<MediaController>?) {
-                                    appendLog("onActiveSessionsChanged() 1")
-
-                                    if (controllers != null && !controllers.isEmpty()) {
-                                        for (controller in controllers) {
-                                            updateCurrentMusic(controller.metadata)
-                                        }
-                                    } else {
-                                        appendLog("NowPlaying: no media controller found (1)")
-                                        updateCurrentMusic(null)
+                                controller.registerCallback(object : MediaController.Callback() {
+                                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                                        updateCurrentMusic(metadata)
                                     }
-                                }
-                            }, componentName
+                                })
+                            } else {
+                                appendLog("NowPlaying: no media controller found (0)")
+                                updateCurrentMusic(null)
+                            }
+                        }
+
+                        updateCurrentMusicFromController(
+                            mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
                         )
+
+                        runOnUiThread {
+                            mediaSessionManager.addOnActiveSessionsChangedListener(
+                                { controllers ->
+                                    updateCurrentMusicFromController(controllers?.getOrNull(0))
+                                }, componentName
+                            )
+                        }
+
+
                     } else if (value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
-                        subscribedDevices.remove(device)
+                        subscribedDevice = null
                         status = BluetoothGatt.GATT_SUCCESS
                         strLog += ", unsubscribed"
                         appendLog(strLog)
@@ -482,6 +472,7 @@ class MainActivity : AppCompatActivity() {
                             gattServer?.sendResponse(device, requestId, status, 0, null)
                         }
                         updateSubscribersUI()
+                        updateCurrentMusic(null)
                     } else {
                         strLog += ", unknown status: ${value[0]} ${value[1]}"
                         appendLog(strLog)
@@ -547,8 +538,7 @@ class MainActivity : AppCompatActivity() {
 
             // set activity result handler
             activityResultHandlers[requestCode] = { result ->
-                Unit
-                val isSuccess = result == Activity.RESULT_OK
+                val isSuccess = result == RESULT_OK
                 if (isSuccess || askType != AskType.InsistUntilSuccess) {
                     activityResultHandlers.remove(requestCode)
                     completion(isSuccess)

@@ -34,7 +34,7 @@ int peer_svc_is_empty(const struct peer_svc *svc);
 
 uint16_t chr_end_handle(const struct peer_svc *svc, const struct peer_chr *chr);
 int chr_is_empty(const struct peer_svc *svc, const struct peer_chr *chr);
-static struct peer_chr *peer_chr_find(
+struct peer_chr *peer_chr_find(
   const struct peer_svc *svc, uint16_t chr_def_handle, struct peer_chr **out_prev
 );
 static void peer_disc_chrs(struct peer *peer);
@@ -270,7 +270,7 @@ static struct peer_chr *peer_chr_find_prev(const struct peer_svc *svc, uint16_t 
   return prev;
 }
 
-static struct peer_chr *peer_chr_find(
+struct peer_chr *peer_chr_find(
   const struct peer_svc *svc, uint16_t chr_val_handle, struct peer_chr **out_prev
 ) {
   struct peer_chr *prev;

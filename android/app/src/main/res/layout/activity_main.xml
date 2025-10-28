@@ -105,7 +105,7 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="32dp"
         android:layout_marginBottom="8dp"
-        android:text="0 subscribers"
+        android:text=""
         app:layout_constraintBottom_toTopOf="@+id/buttonSend"
         app:layout_constraintEnd_toEndOf="parent" />
 
