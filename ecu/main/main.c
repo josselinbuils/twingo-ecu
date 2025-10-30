@@ -14,6 +14,9 @@
 #define READ_BIT I2C_MASTER_READ
 #define TACHOMETER_I2C_ADDRESS 0x1
 
+#define BACKGROUND_COLOR lv_color_hex(0x101200)
+#define COLOR lv_color_hex(0xa4b700)
+
 const int BORDER_WIDTH = 5;
 const int INDICATOR_RANGE = 6000;
 const int INDICATOR_WIDTH = 44;
@@ -23,6 +26,7 @@ const int SCALE_SIZE = 940;
 const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
 const int TICK_WIDTH = 2;
 
+lv_obj_t *cover_img;
 lv_obj_t *indic;
 lv_obj_t *label;
 
@@ -76,16 +80,16 @@ static esp_err_t __attribute__((unused)) i2c_master_read_slave(
   return ret;
 }
 
-void set_label_text(const char *text) {
-  ESP_LOGI(TAG, "Set label text: %s", text);
+void set_current_music(const char *current_music) {
+  ESP_LOGI(TAG, "Set current music: %s", current_music);
 
   if (lvgl_port_lock(-1)) {
-    if (strlen(text) > 0) {
-      char str[strlen(LV_SYMBOL_AUDIO) + 2 + strlen(text)];
+    if (strlen(current_music) > 0) {
+      char str[strlen(LV_SYMBOL_AUDIO) + 2 + strlen(current_music)];
 
       strcpy(str, LV_SYMBOL_AUDIO);
       strcat(str, "  ");
-      strcat(str, text);
+      strcat(str, current_music);
 
       lv_label_set_text(label, str);
     } else {
@@ -95,10 +99,31 @@ void set_label_text(const char *text) {
   }
 }
 
-void app_main() {
-  lv_color_t BACKGROUND_COLOR = lv_color_hex(0x101200);
-  lv_color_t COLOR = lv_color_hex(0xa4b700);
+void set_music_cover(uint8_t *music_cover_map_src) {
+  ESP_LOGI(TAG, "Set music cover");
 
+  if (lvgl_port_lock(-1)) {
+    const lv_draw_buf_t music_cover = {
+      .header =
+        {
+          .magic = LV_IMAGE_HEADER_MAGIC,
+          .cf = LV_COLOR_FORMAT_A8,
+          .flags = 0,
+          .w = 64,
+          .h = 64,
+          .stride = 64,
+          .reserved_2 = 0,
+        },
+      .data_size = 4096,
+      .data = music_cover_map_src
+    };
+
+    lv_img_set_src(cover_img, &music_cover);
+    lvgl_port_unlock();
+  }
+}
+
+void app_main() {
   // ESP_LOGI(TAG, "Initialize CAN bus");
   // ESP_ERROR_CHECK(waveshare_twai_init());
 
@@ -262,13 +287,18 @@ void app_main() {
     // Add twingo logo
 
     LV_IMG_DECLARE(twingo_logo)
+    lv_obj_t *logo_img = lv_img_create(inner_scale);
 
-    lv_obj_t *img = lv_img_create(inner_scale);
+    lv_img_set_src(logo_img, &twingo_logo);
+    lv_obj_set_style_img_recolor_opa(logo_img, LV_OPA_100, 0);
+    lv_obj_set_style_img_recolor(logo_img, COLOR, 0);
+    lv_obj_align(logo_img, LV_ALIGN_CENTER, 0, -150);
 
-    lv_img_set_src(img, &twingo_logo);
-    lv_obj_set_style_img_recolor_opa(img, LV_OPA_100, 0);
-    lv_obj_set_style_img_recolor(img, COLOR, 0);
-    lv_obj_align(img, LV_ALIGN_CENTER, 0, -150);
+    cover_img = lv_img_create(inner_scale);
+
+    lv_obj_align(cover_img, LV_ALIGN_CENTER, -50, -50);
+    lv_obj_set_style_img_recolor_opa(cover_img, LV_OPA_100, 0);
+    lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
 
     // Add text
 
@@ -293,7 +323,7 @@ void app_main() {
   }
 
   ESP_LOGI(TAG, "Initialize BLE");
-  init_ble(set_label_text);
+  init_ble(set_current_music, set_music_cover);
 
   while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");

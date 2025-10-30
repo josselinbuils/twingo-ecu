@@ -21,6 +21,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -31,16 +32,22 @@ import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import com.google.android.material.switchmaterial.SwitchMaterial
 import java.text.Normalizer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.ceil
+import kotlin.math.min
+import androidx.core.graphics.set
 
 private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
 
@@ -49,9 +56,14 @@ private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val SERVICE_UUID = "39394650-8477-4ffa-bc10-dfef56583a29"
 private const val CHARACTERISTIC_CURRENT_MUSIC_UUID = "39394651-8477-4ffa-bc10-dfef56583a29"
 private const val DESCRIPTOR_CURRENT_MUSIC_UUID = "39394652-8477-4ffa-bc10-dfef56583a29"
+private const val CHARACTERISTIC_MUSIC_COVER_UUID = "39394653-8477-4ffa-bc10-dfef56583a29"
 
 class MainActivity : AppCompatActivity() {
     private val instance = this
+    private val musicCover: ImageView
+        get() = findViewById(R.id.musicCover)
+    private val monochromeMusicCover: ImageView
+        get() = findViewById(R.id.monochromeMusicCover)
     private val switchAdvertising: SwitchMaterial
         get() = findViewById(R.id.switchAdvertising)
     private val textViewLog: TextView
@@ -153,17 +165,42 @@ class MainActivity : AppCompatActivity() {
         ).contains(packageName)
     }
 
-    private fun sendNotification(uuid: String, data: ByteArray) {
-        if (subscribedDevice == null) {
+    private fun sendNotification(uuid: String, data: ByteArray, split: Boolean = false) {
+        val device = subscribedDevice;
+        val server = gattServer;
+
+        if (device == null || server == null) {
             return
         }
-        val characteristic = gattServer?.getService(UUID.fromString(SERVICE_UUID))
+
+        val characteristic = server.getService(UUID.fromString(SERVICE_UUID))
             ?.getCharacteristic(UUID.fromString(uuid))
 
-        characteristic?.let {
-            it.value = data
-            appendLog("Sending notification: ${data.toString(Charsets.UTF_8)}")
-            gattServer?.notifyCharacteristicChanged(subscribedDevice, it, false)
+        if (characteristic !== null) {
+            if (split) {
+                val notificationDataByteSize = mtu - 16
+                val numberOfNotifications =
+                    ceil(data.size.toDouble() / notificationDataByteSize).toInt()
+
+                for (index in 0..<numberOfNotifications) {
+                    val notificationData = byteArrayOf(
+                        index.toByte(), numberOfNotifications.toByte()
+                    ) + data.copyOfRange(
+                        notificationDataByteSize * index,
+                        min(notificationDataByteSize * (index + 1), data.size)
+                    )
+
+                    appendLog("Sending notification: ${index + 1}/${numberOfNotifications} ${notificationData.size} bytes")
+                    server.notifyCharacteristicChanged(
+                        device, characteristic, false, notificationData
+                    )
+                }
+            } else {
+                appendLog("Sending notification: ${data.toString(Charsets.UTF_8)}")
+                server.notifyCharacteristicChanged(
+                    device, characteristic, false, data
+                )
+            }
         }
     }
 
@@ -180,13 +217,93 @@ class MainActivity : AppCompatActivity() {
                 sendNotification(
                     CHARACTERISTIC_CURRENT_MUSIC_UUID, currentMusic.toByteArray(Charsets.UTF_8)
                 )
+
+                var bitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+
+                if (bitmap != null) {
+                    bitmap = bitmap.scale(64, 64)
+
+                    val pixels = IntArray(bitmap.width * bitmap.height)
+                    val width = bitmap.width
+                    val height = bitmap.height
+
+                    bitmap.getPixels(
+                        pixels, 0, width, 0, 0, width, height
+                    )
+
+                    val monochromeData = IntArray(pixels.size)
+
+                    val lumR = DoubleArray(256)
+                    val lumG = DoubleArray(256)
+                    val lumB = DoubleArray(256)
+
+                    // Greyscale luminance
+                    for (i in 0..255) {
+                        lumR[i] = i * 0.299;
+                        lumG[i] = i * 0.587;
+                        lumB[i] = i * 0.114;
+                    }
+
+                    for ((index, pixel) in pixels.withIndex()) {
+                        // Bill Atkinson's dithering algorithm
+                        val r = (pixel shr 16) and 0xff
+                        val g = (pixel shr 8) and 0xff
+                        val b = pixel and 0xff
+                        val pixelValue = (lumR[r] + lumG[g] + lumB[b]).toInt()
+                        val newPixelValue = if (pixelValue < 129) 0 else 255
+                        val err = (pixelValue - newPixelValue) / 8
+
+                        monochromeData[index] = newPixelValue
+
+                        if (index < pixels.size - 1) {
+                            monochromeData[index + 1] = monochromeData[index + 1] + err
+                        }
+                        if (index < pixels.size - 2) {
+                            monochromeData[index + 2] = monochromeData[index + 2] + err
+                        }
+                        if (index < pixels.size - width + 1) {
+                            monochromeData[index + width - 1] =
+                                monochromeData[index + width - 1] + err
+                        }
+                        if (index < pixels.size - width) {
+                            monochromeData[index + width] = monochromeData[index + width] + err
+                        }
+                        if (index < pixels.size - width - 1) {
+                            monochromeData[index + width + 1] =
+                                monochromeData[index + width + 1] + err
+                        }
+                        if (index < pixels.size - width * 2) {
+                            monochromeData[index + width * 2] =
+                                monochromeData[index + width * 2] + err
+                        }
+                    }
+
+                    val monochromeDataBytes = ByteArray(pixels.size)
+
+                    val monochromeBitmap = createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+
+                    for (index in monochromeData.indices) {
+                        val x = index % 64
+                        val y = index / 64
+                        val pixelValue = monochromeData[index]
+                        val color =
+                            (255 and 0xff) shl 24 or (pixelValue and 0xff) shl 16 or (pixelValue and 0xff) shl 8 or (pixelValue and 0xff)
+
+                        monochromeDataBytes[index] = pixelValue.toByte()
+                        monochromeBitmap[x, y] = color
+                    }
+
+                    runOnUiThread {
+                        musicCover.setImageBitmap(bitmap)
+                        monochromeMusicCover.setImageBitmap(monochromeBitmap)
+                    }
+
+                    sendNotification(CHARACTERISTIC_MUSIC_COVER_UUID, monochromeDataBytes, true)
+                }
             }
         } else if (currentMusic != "") {
             currentMusic = ""
-
-            sendNotification(
-                CHARACTERISTIC_CURRENT_MUSIC_UUID, "".toByteArray(Charsets.UTF_8)
-            )
+            sendNotification(CHARACTERISTIC_CURRENT_MUSIC_UUID, "".toByteArray(Charsets.UTF_8))
         }
     }
 
@@ -236,11 +353,19 @@ class MainActivity : AppCompatActivity() {
             BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
         )
         currentMusicCharacteristic.addDescriptor(currentMusicDescriptor)
-
         service.addCharacteristic(currentMusicCharacteristic)
 
+        val musicCoverCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(CHARACTERISTIC_MUSIC_COVER_UUID),
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+        service.addCharacteristic(musicCoverCharacteristic)
+
         val result = gattServer.addService(service)
+
         this.gattServer = gattServer
+
         appendLog(
             "addService " + when (result) {
                 true -> "OK"
@@ -304,6 +429,8 @@ class MainActivity : AppCompatActivity() {
     private var gattServer: BluetoothGattServer? = null
     private var subscribedDevice: BluetoothDevice? = null
 
+    private var mtu = 256
+
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             runOnUiThread {
@@ -322,6 +449,7 @@ class MainActivity : AppCompatActivity() {
 
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
             appendLog("onMtuChanged mtu=$mtu")
+            instance.mtu = mtu;
         }
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {

@@ -29,26 +29,30 @@
 
 #define TAG "BLE"
 
-// The UUID of the service containing the subscribable characteristic
 static const ble_uuid_t *remote_svc_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x50, 0x46, 0x39, 0x39,
 ); // 39394651-8477-4ffa-bc10-dfef56583a29
 
-// The UUID of the current music chatacteristic
 static const ble_uuid_t *remote_chr_current_music_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x51, 0x46, 0x39, 0x39,
 );
 
-// The UUID of the music title CCCD
 static const ble_uuid_t *remote_cccd_current_music_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x52, 0x46, 0x39, 0x39,
 );
+
+static const ble_uuid_t *remote_chr_music_cover_uuid = BLE_UUID128_DECLARE(
+  0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x53, 0x46, 0x39, 0x39,
+);
+
+uint8_t music_cover_map[4096];
 
 static int blecent_gap_event(struct ble_gap_event *event, void *arg);
 
 void ble_store_config_init(void);
 
 void (*set_current_music_callback)(const char *current_music);
+void (*set_music_cover_callback)(const uint8_t *music_cover_map);
 
 /**
  * Application callback.  Called when the attempt to subscribe to notifications
@@ -360,6 +364,10 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         buffer_len
       );
 
+      if (event->notify_rx.indication) {
+        return 0;
+      }
+
       struct peer *peer = peer_find(event->notify_rx.conn_handle);
 
       if (peer == NULL) {
@@ -370,7 +378,15 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
 
       struct peer_chr *chr = peer_chr_find(peer->cur_svc, event->notify_rx.attr_handle, NULL);
 
-      if (chr != NULL && ble_uuid_cmp(&chr->chr.uuid.u, remote_chr_current_music_uuid) == 0) {
+      if (chr == NULL) {
+        return 0;
+      }
+
+      // Debug
+      // char buf[BLE_UUID_STR_LEN];
+      // ESP_LOGI(TAG, "uuid: %s", ble_uuid_to_str(&chr->chr.uuid.u, buf));
+
+      if (ble_uuid_cmp(&chr->chr.uuid.u, remote_chr_current_music_uuid) == 0) {
         char *str;
         str = malloc(buffer_len + 1);
         os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
@@ -378,6 +394,32 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         ESP_LOGI(TAG, "Current music received: %s", str);
         (*set_current_music_callback)(str);
         free(str);
+      } else if (ble_uuid_cmp(&chr->chr.uuid.u, remote_chr_music_cover_uuid) == 0) {
+        int offset;
+        int number_of_notifications;
+
+        os_mbuf_copydata(event->notify_rx.om, 0, 1, &offset);
+        os_mbuf_copydata(event->notify_rx.om, 1, 1, &number_of_notifications);
+
+        offset &= 0xff;
+        number_of_notifications &= 0xff;
+
+        os_mbuf_copydata(event->notify_rx.om, 2, buffer_len - 2, music_cover_map + offset * 240);
+
+        for (int i = 0; i < sizeof(music_cover_map); i++) {
+          music_cover_map[i] &= 0xff;
+        }
+
+        // ESP_LOGI(TAG, "\n\n");
+        ESP_LOGI(TAG, "Music cover part received: %u/%u", offset + 1, number_of_notifications);
+        // print_mbuf(event->notify_rx.om);
+        // ESP_LOGI(TAG, "\n\n");
+        // print_bytes(music_cover_map + offset * 242, buffer_len - 2);
+        // ESP_LOGI(TAG, "\n\n");
+
+        if (offset + 1 == number_of_notifications) {
+          (*set_music_cover_callback)(music_cover_map);
+        }
       }
       return 0;
 
@@ -435,7 +477,7 @@ void blecent_host_task(void *param) {
   nimble_port_freertos_deinit();
 }
 
-void init_ble(void (*callback)()) {
+void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) {
   // Initialize NVS — it is used to store PHY calibration data
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -444,7 +486,8 @@ void init_ble(void (*callback)()) {
   }
   ESP_ERROR_CHECK(ret);
 
-  set_current_music_callback = callback;
+  set_current_music_callback = current_music_callback;
+  set_music_cover_callback = music_cover_callback;
 
   ret = nimble_port_init();
   if (ret != ESP_OK) {
