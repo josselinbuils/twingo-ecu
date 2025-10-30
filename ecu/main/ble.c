@@ -404,7 +404,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         offset &= 0xff;
         number_of_notifications &= 0xff;
 
-        os_mbuf_copydata(event->notify_rx.om, 2, buffer_len - 2, music_cover_map + offset * 240);
+        os_mbuf_copydata(event->notify_rx.om, 2, buffer_len - 2, music_cover_map + offset * 496);
 
         for (int i = 0; i < sizeof(music_cover_map); i++) {
           music_cover_map[i] &= 0xff;
@@ -414,7 +414,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         ESP_LOGI(TAG, "Music cover part received: %u/%u", offset + 1, number_of_notifications);
         // print_mbuf(event->notify_rx.om);
         // ESP_LOGI(TAG, "\n\n");
-        // print_bytes(music_cover_map + offset * 242, buffer_len - 2);
+        // print_bytes(music_cover_map + offset * 496, buffer_len - 2);
         // ESP_LOGI(TAG, "\n\n");
 
         if (offset + 1 == number_of_notifications) {
