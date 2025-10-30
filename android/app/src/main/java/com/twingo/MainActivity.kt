@@ -62,8 +62,6 @@ class MainActivity : AppCompatActivity() {
     private val instance = this
     private val musicCover: ImageView
         get() = findViewById(R.id.musicCover)
-    private val monochromeMusicCover: ImageView
-        get() = findViewById(R.id.monochromeMusicCover)
     private val switchAdvertising: SwitchMaterial
         get() = findViewById(R.id.switchAdvertising)
     private val textViewLog: TextView
@@ -224,15 +222,10 @@ class MainActivity : AppCompatActivity() {
                     bitmap = bitmap.scale(64, 64)
 
                     val pixels = IntArray(bitmap.width * bitmap.height)
-                    val width = bitmap.width
-                    val height = bitmap.height
 
                     bitmap.getPixels(
-                        pixels, 0, width, 0, 0, width, height
+                        pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height
                     )
-
-                    val monochromeData = IntArray(pixels.size)
-
                     val lumR = DoubleArray(256)
                     val lumG = DoubleArray(256)
                     val lumB = DoubleArray(256)
@@ -244,61 +237,25 @@ class MainActivity : AppCompatActivity() {
                         lumB[i] = i * 0.114;
                     }
 
+                    val grayscaleData = IntArray(pixels.size)
+
                     for ((index, pixel) in pixels.withIndex()) {
-                        // Bill Atkinson's dithering algorithm
                         val r = (pixel shr 16) and 0xff
                         val g = (pixel shr 8) and 0xff
                         val b = pixel and 0xff
-                        val pixelValue = (lumR[r] + lumG[g] + lumB[b]).toInt()
-                        val newPixelValue = if (pixelValue < 129) 0 else 255
-                        val err = (pixelValue - newPixelValue) / 8
-
-                        monochromeData[index] = newPixelValue
-
-                        if (index < pixels.size - 1) {
-                            monochromeData[index + 1] = monochromeData[index + 1] + err
-                        }
-                        if (index < pixels.size - 2) {
-                            monochromeData[index + 2] = monochromeData[index + 2] + err
-                        }
-                        if (index < pixels.size - width + 1) {
-                            monochromeData[index + width - 1] =
-                                monochromeData[index + width - 1] + err
-                        }
-                        if (index < pixels.size - width) {
-                            monochromeData[index + width] = monochromeData[index + width] + err
-                        }
-                        if (index < pixels.size - width - 1) {
-                            monochromeData[index + width + 1] =
-                                monochromeData[index + width + 1] + err
-                        }
-                        if (index < pixels.size - width * 2) {
-                            monochromeData[index + width * 2] =
-                                monochromeData[index + width * 2] + err
-                        }
+                        grayscaleData[index] = (lumR[r] + lumG[g] + lumB[b]).toInt()
                     }
 
-                    val monochromeDataBytes = ByteArray(pixels.size)
+                    val grayscaleDataBytes = ByteArray(pixels.size)
 
-                    val monochromeBitmap = createBitmap(64, 64, Bitmap.Config.ARGB_8888);
-
-                    for (index in monochromeData.indices) {
-                        val x = index % 64
-                        val y = index / 64
-                        val pixelValue = monochromeData[index]
-                        val color =
-                            (255 and 0xff) shl 24 or (pixelValue and 0xff) shl 16 or (pixelValue and 0xff) shl 8 or (pixelValue and 0xff)
-
-                        monochromeDataBytes[index] = pixelValue.toByte()
-                        monochromeBitmap[x, y] = color
+                    for (index in grayscaleData.indices) {
+                        grayscaleDataBytes[index] = grayscaleData[index].toByte()
                     }
 
                     runOnUiThread {
                         musicCover.setImageBitmap(bitmap)
-                        monochromeMusicCover.setImageBitmap(monochromeBitmap)
                     }
-
-                    sendNotification(CHARACTERISTIC_MUSIC_COVER_UUID, monochromeDataBytes, true)
+                    sendNotification(CHARACTERISTIC_MUSIC_COVER_UUID, grayscaleDataBytes, true)
                 }
             }
         } else if (currentMusic != "") {

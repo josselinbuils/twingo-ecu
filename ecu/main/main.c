@@ -297,7 +297,6 @@ void app_main() {
     cover_img = lv_img_create(inner_scale);
 
     lv_obj_align(cover_img, LV_ALIGN_CENTER, -50, -50);
-    lv_obj_set_style_img_recolor_opa(cover_img, LV_OPA_100, 0);
     lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
 
     // Add text
