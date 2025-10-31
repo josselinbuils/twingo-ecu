@@ -18,7 +18,8 @@
 #define COLOR lv_color_hex(0xa4b700)
 
 const int BORDER_WIDTH = 5;
-const int INDICATOR_RANGE = 6000;
+const int INDICATOR_DISPLAY_RANGE = 150;
+const int INDICATOR_REAL_RANGE = 6000;
 const int INDICATOR_WIDTH = 44;
 const int LABELS_GAP = 30;
 const int PADDING = 10;
@@ -163,7 +164,7 @@ void app_main() {
     lv_obj_set_style_radius(indic, 0, LV_PART_INDICATOR);
     lv_arc_set_rotation(indic, 180);
     lv_arc_set_bg_angles(indic, 0, 180);
-    lv_arc_set_range(indic, 0, INDICATOR_RANGE);
+    lv_arc_set_range(indic, 0, INDICATOR_DISPLAY_RANGE);
     lv_obj_set_style_pad_all(indic, PADDING + BORDER_WIDTH, LV_PART_MAIN);
 
     static lv_style_t indic_style;
@@ -209,9 +210,8 @@ void app_main() {
 
     lv_obj_add_event(inner_scale, click_handler, LV_EVENT_CLICKED, NULL);
 
-    lv_scale_set_range(inner_scale, 0, INDICATOR_RANGE);
-
-    lv_scale_set_total_tick_count(inner_scale, 151);
+    lv_scale_set_range(inner_scale, 0, INDICATOR_DISPLAY_RANGE);
+    lv_scale_set_total_tick_count(inner_scale, INDICATOR_DISPLAY_RANGE + 1);
     lv_scale_set_major_tick_every(inner_scale, 25);
 
     lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_ITEMS);
@@ -228,7 +228,7 @@ void app_main() {
 
     lv_scale_section_t *main_section = lv_scale_add_section(inner_scale);
 
-    lv_scale_section_set_range(main_section, 0, INDICATOR_RANGE);
+    lv_scale_section_set_range(main_section, 0, INDICATOR_DISPLAY_RANGE);
     lv_scale_set_section_style_items(inner_scale, main_section, &tick_style);
     lv_scale_set_section_style_indicator(inner_scale, main_section, &tick_style);
 
@@ -298,6 +298,9 @@ void app_main() {
 
     lv_obj_align(cover_img, LV_ALIGN_CENTER, -50, -50);
     lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
+    lv_obj_set_style_border_color(cover_img, COLOR, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(cover_img, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(cover_img, LV_BORDER_SIDE_RIGHT, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // Add text
 
@@ -316,7 +319,7 @@ void app_main() {
     lv_style_set_text_font(&label_style, &lv_font_montserrat_28);
     lv_obj_add_style(label, &label_style, 0);
 
-    // lv_arc_set_value(indic, 5500);
+    // lv_arc_set_value(indic, 5500 * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
 
     lvgl_port_unlock();
   }
@@ -340,7 +343,7 @@ void app_main() {
     } else if (ret == ESP_OK) {
       if (lvgl_port_lock(-1)) {
         uint16_t rpm = buffer[0] | (buffer[1] << 8);
-        lv_arc_set_value(indic, rpm);
+        lv_arc_set_value(indic, rpm * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
         lvgl_port_unlock();
         // ESP_LOGI(TAG, "rpm: %d\n", rpm);
       }
