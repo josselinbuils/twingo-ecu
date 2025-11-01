@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
     private val synchronizerConnection = object : ServiceConnection {
 
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            appendLog("Synchronizer: onServiceConnected")
+            appendLog("Synchronizer service connected")
 
             val binder = service as Synchronizer.LocalBinder
             synchronizer = binder.getService()
@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
-            appendLog("Synchronizer: onServiceConnected")
+            appendLog("Synchronizer service disconnected")
 
             synchronizerBound = false
             synchronizer = null
