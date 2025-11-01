@@ -8,26 +8,6 @@
     tools:context=".MainActivity">
 
     <TextView
-        android:id="@+id/textViewIsAdvertising"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:text="@string/text_static_is_advertising"
-        android:textSize="18sp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/switchAdvertising"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:checked="true"
-        app:layout_constraintBaseline_toBaselineOf="@+id/textViewIsAdvertising"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <TextView
         android:id="@+id/textViewConnectionState"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -35,11 +15,11 @@
         android:layout_marginTop="16dp"
         android:layout_marginEnd="16dp"
         android:background="@drawable/img_gray_border"
-        android:text="@string/text_disconnected"
+        android:text="@string/textDisconnected"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textViewIsAdvertising" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
         android:id="@+id/textViewHintCurrentMusicCharacteristic"
@@ -47,20 +27,10 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
-        android:text="@string/text_static_current_music_characteristic"
+        android:text="@string/textStaticCurrentMusicCharacteristic"
         android:textSize="12sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textViewConnectionState" />
-
-    <TextView
-        android:id="@+id/textViewSubscribers"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="32dp"
-        android:layout_marginBottom="8dp"
-        android:text=""
-        app:layout_constraintBottom_toTopOf="@+id/buttonNotify"
-        app:layout_constraintEnd_toEndOf="parent" />
 
     <EditText
         android:id="@+id/editTextCurrentMusicCharacteristic"
@@ -82,7 +52,7 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
         android:onClick="onTapSend"
-        android:text="@string/button_notify"
+        android:text="@string/buttonNotify"
         app:layout_constraintBaseline_toBaselineOf="@+id/editTextCurrentMusicCharacteristic"
         app:layout_constraintEnd_toEndOf="parent" />
 
@@ -94,6 +64,16 @@
         android:layout_marginTop="16dp"
         android:contentDescription=""
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/editTextCurrentMusicCharacteristic" />
+
+    <ImageView
+        android:id="@+id/grayscaleMusicCover"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:contentDescription=""
+        app:layout_constraintStart_toEndOf="@+id/musicCover"
         app:layout_constraintTop_toBottomOf="@+id/editTextCurrentMusicCharacteristic" />
 
     <ScrollView
@@ -131,7 +111,7 @@
         android:paddingTop="4dp"
         android:paddingRight="8dp"
         android:paddingBottom="4dp"
-        android:text="@string/button_clear_log"
+        android:text="@string/buttonClearLogs"
         app:layout_constraintEnd_toEndOf="@+id/scrollViewLog"
         app:layout_constraintTop_toTopOf="@+id/scrollViewLog" />
 

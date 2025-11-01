@@ -5,9 +5,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattServer
 import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothGattService
@@ -27,6 +25,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import android.provider.Settings
 import android.util.Log
@@ -39,7 +38,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
-import com.google.android.material.switchmaterial.SwitchMaterial
+import androidx.core.graphics.set
 import java.text.Normalizer
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,47 +46,32 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.ceil
 import kotlin.math.min
-import androidx.core.graphics.set
 
 private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
-
-private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
-
-private const val SERVICE_UUID = "39394650-8477-4ffa-bc10-dfef56583a29"
 private const val CHARACTERISTIC_CURRENT_MUSIC_UUID = "39394651-8477-4ffa-bc10-dfef56583a29"
-private const val DESCRIPTOR_CURRENT_MUSIC_UUID = "39394652-8477-4ffa-bc10-dfef56583a29"
 private const val CHARACTERISTIC_MUSIC_COVER_UUID = "39394653-8477-4ffa-bc10-dfef56583a29"
+private const val DEBUG = false
+private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
+private const val SERVICE_UUID = "39394650-8477-4ffa-bc10-dfef56583a29"
 
 class MainActivity : AppCompatActivity() {
     private val instance = this
+    private val editTextCurrentMusicCharacteristic: EditText
+        get() = findViewById(R.id.editTextCurrentMusicCharacteristic)
+    private val grayscaleMusicCover: ImageView
+        get() = findViewById(R.id.grayscaleMusicCover)
     private val musicCover: ImageView
         get() = findViewById(R.id.musicCover)
-    private val switchAdvertising: SwitchMaterial
-        get() = findViewById(R.id.switchAdvertising)
-    private val textViewLog: TextView
-        get() = findViewById(R.id.textViewLog)
     private val scrollViewLog: ScrollView
         get() = findViewById(R.id.scrollViewLog)
     private val textViewConnectionState: TextView
         get() = findViewById(R.id.textViewConnectionState)
-    private val editTextCurrentMusicCharacteristic: EditText
-        get() = findViewById(R.id.editTextCurrentMusicCharacteristic)
-    private val textViewSubscribers: TextView
-        get() = findViewById(R.id.textViewSubscribers)
+    private val textViewLog: TextView
+        get() = findViewById(R.id.textViewLog)
 
-    private var currentMusic = ""
-
+    private var currentTitle: String? = null
     private var isAdvertising = false
-        set(value) {
-            field = value
-
-            // update visual state of the switch
-            runOnUiThread {
-                Handler().postDelayed({
-                    if (value != switchAdvertising.isChecked) switchAdvertising.isChecked = value
-                }, 200)
-            }
-        }
+    private var mediaMetadata: MediaMetadata? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,21 +96,19 @@ class MainActivity : AppCompatActivity() {
                     e.printStackTrace()
                 }
             }
-
             prepareAndStartAdvertising()
-
-            switchAdvertising.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    prepareAndStartAdvertising()
-                } else {
-                    bleStopAdvertising()
-                }
-            }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        appendLog("Resume")
+        registerMediaController()
     }
 
     override fun onDestroy() {
         bleStopAdvertising()
+        bleStopGattServer()
         super.onDestroy()
     }
 
@@ -151,7 +133,7 @@ class MainActivity : AppCompatActivity() {
             textViewLog.text = textViewLog.text.toString() + "\n$strTime $message"
 
             // scroll after delay, because textView has to be updated first
-            Handler().postDelayed({
+            Handler(Looper.getMainLooper()).postDelayed({
                 scrollViewLog.fullScroll(View.FOCUS_DOWN)
             }, 16)
         }
@@ -163,8 +145,55 @@ class MainActivity : AppCompatActivity() {
         ).contains(packageName)
     }
 
+    private fun registerMediaController() {
+        val mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
+        val componentName = ComponentName(instance, NotificationListener::class.java)
+        val controller = mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
+
+        if (controller != null) {
+            appendLog("Initial music metadata set")
+            mediaMetadata = controller.metadata
+            currentTitle = mediaMetadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            sendCurrentMusic()
+
+            runOnUiThread {
+                controller.registerCallback(object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        mediaMetadata = metadata
+
+                        val newCurrentTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+
+                        val bitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+
+                        if (newCurrentTitle != currentTitle && bitmap != null) {
+                            appendLog("Current music changed")
+                            currentTitle = newCurrentTitle
+                            sendCurrentMusic()
+                        } else if (DEBUG) {
+                            appendLog("Current music did not change")
+                        }
+                    }
+
+                    override fun onSessionDestroyed() {
+                        appendLog("Media session destroyed")
+                    }
+                })
+
+                mediaSessionManager.addOnActiveSessionsChangedListener(
+                    { controllers ->
+                        appendLog("New media session")
+                        registerMediaController()
+                    }, componentName
+                )
+            }
+        } else {
+            appendLog("No media controller found")
+            mediaMetadata = null
+        }
+    }
+
     private fun sendNotification(uuid: String, data: ByteArray, split: Boolean = false) {
-        val device = subscribedDevice;
+        val device = connectedDevice;
         val server = gattServer;
 
         if (device == null || server == null) {
@@ -174,18 +203,19 @@ class MainActivity : AppCompatActivity() {
         val characteristic = server.getService(UUID.fromString(SERVICE_UUID))
             ?.getCharacteristic(UUID.fromString(uuid))
 
-        if (characteristic !== null) {
+        if (characteristic != null) {
             if (split) {
-                val notificationDataByteSize = mtu - 16
+                val notificationDataByteSize = mtu - 2 // 2 bytes to store offset
                 val numberOfNotifications =
                     ceil(data.size.toDouble() / notificationDataByteSize).toInt()
 
                 for (index in 0..<numberOfNotifications) {
+                    val offset = notificationDataByteSize * (numberOfNotifications - index - 1)
+
                     val notificationData = byteArrayOf(
-                        index.toByte(), numberOfNotifications.toByte()
+                        (offset and 0xff).toByte(), ((offset shr 8) and 0xff).toByte()
                     ) + data.copyOfRange(
-                        notificationDataByteSize * index,
-                        min(notificationDataByteSize * (index + 1), data.size)
+                        offset, min(offset + notificationDataByteSize, data.size)
                     )
 
                     appendLog("Sending notification: ${index + 1}/${numberOfNotifications} ${notificationData.size} bytes")
@@ -194,7 +224,7 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
             } else {
-                appendLog("Sending notification: ${data.toString(Charsets.UTF_8)}")
+                appendLog("Sending notification: \"${data.toString(Charsets.UTF_8)}\"")
                 server.notifyCharacteristicChanged(
                     device, characteristic, false, data
                 )
@@ -202,71 +232,74 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateCurrentMusic(metadata: MediaMetadata?) {
+    private fun sendCurrentMusic() {
+        val metadata = mediaMetadata
+
+        if (connectedDevice == null) {
+            return
+        }
+
         if (metadata != null) {
             val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
             val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
-            val music = Normalizer.normalize("$artist - $title", Normalizer.Form.NFD)
+            val music = Normalizer.normalize("$title\n$artist", Normalizer.Form.NFD)
                 .replace("\\p{Mn}+".toRegex(), "") // Removes accents
 
-            if (currentMusic != music) {
-                currentMusic = music
+            sendNotification(
+                CHARACTERISTIC_CURRENT_MUSIC_UUID, music.toByteArray(Charsets.UTF_8)
+            )
 
-                sendNotification(
-                    CHARACTERISTIC_CURRENT_MUSIC_UUID, currentMusic.toByteArray(Charsets.UTF_8)
+            var bitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+
+            if (bitmap != null) {
+                val coverSize = 64
+
+                bitmap = bitmap.scale(coverSize, coverSize)
+
+                val pixels = IntArray(coverSize * coverSize)
+
+                bitmap.getPixels(
+                    pixels, 0, coverSize, 0, 0, coverSize, coverSize
                 )
+                val lumR = DoubleArray(256)
+                val lumG = DoubleArray(256)
+                val lumB = DoubleArray(256)
 
-                var bitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-
-                if (bitmap != null) {
-                    bitmap = bitmap.scale(64, 64)
-
-                    val pixels = IntArray(bitmap.width * bitmap.height)
-
-                    bitmap.getPixels(
-                        pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height
-                    )
-                    val lumR = DoubleArray(256)
-                    val lumG = DoubleArray(256)
-                    val lumB = DoubleArray(256)
-
-                    // Greyscale luminance
-                    for (i in 0..255) {
-                        lumR[i] = i * 0.299;
-                        lumG[i] = i * 0.587;
-                        lumB[i] = i * 0.114;
-                    }
-
-                    val grayscaleData = IntArray(pixels.size)
-
-                    for ((index, pixel) in pixels.withIndex()) {
-                        val r = (pixel shr 16) and 0xff
-                        val g = (pixel shr 8) and 0xff
-                        val b = pixel and 0xff
-                        grayscaleData[index] = (lumR[r] + lumG[g] + lumB[b]).toInt()
-                    }
-
-                    val grayscaleDataBytes = ByteArray(pixels.size)
-
-                    for (index in grayscaleData.indices) {
-                        grayscaleDataBytes[index] = grayscaleData[index].toByte()
-                    }
-
-                    runOnUiThread {
-                        musicCover.setImageBitmap(bitmap)
-                    }
-                    sendNotification(CHARACTERISTIC_MUSIC_COVER_UUID, grayscaleDataBytes, true)
+                // Greyscale luminance
+                for (i in 0..255) {
+                    lumR[i] = i * 0.299;
+                    lumG[i] = i * 0.587;
+                    lumB[i] = i * 0.114;
                 }
-            }
-        } else if (currentMusic != "") {
-            currentMusic = ""
-            sendNotification(CHARACTERISTIC_CURRENT_MUSIC_UUID, "".toByteArray(Charsets.UTF_8))
-        }
-    }
 
-    private fun updateSubscribersUI() {
-        runOnUiThread {
-            textViewSubscribers.text = if (subscribedDevice !== null) "subscribed" else ""
+                val grayscaleData = IntArray(pixels.size)
+
+                for ((index, pixel) in pixels.withIndex()) {
+                    val r = (pixel shr 16) and 0xff
+                    val g = (pixel shr 8) and 0xff
+                    val b = pixel and 0xff
+                    grayscaleData[index] = (lumR[r] + lumG[g] + lumB[b]).toInt()
+                }
+
+                val grayscaleDataBytes = ByteArray(pixels.size)
+                val grayscaleBitmap = createBitmap(coverSize, coverSize, Bitmap.Config.ARGB_8888);
+
+                for (index in grayscaleData.indices) {
+                    grayscaleDataBytes[index] = grayscaleData[index].toByte()
+                    grayscaleBitmap[index % coverSize, index / coverSize] =
+                        (255 and 0xff) shl 24 or (grayscaleData[index] and 0xff) shl 16 or (grayscaleData[index] and 0xff) shl 8 or (grayscaleData[index] and 0xff)
+                }
+
+                runOnUiThread {
+                    musicCover.setImageBitmap(bitmap)
+                    grayscaleMusicCover.setImageBitmap(grayscaleBitmap)
+                }
+                sendNotification(CHARACTERISTIC_MUSIC_COVER_UUID, grayscaleDataBytes, true)
+            } else {
+                appendLog("No bitmap found")
+            }
+        } else {
+            sendNotification(CHARACTERISTIC_CURRENT_MUSIC_UUID, "".toByteArray(Charsets.UTF_8))
         }
     }
 
@@ -274,28 +307,34 @@ class MainActivity : AppCompatActivity() {
         ensureBluetoothCanBeUsed { isSuccess, message ->
             runOnUiThread {
                 appendLog(message)
+
                 if (isSuccess) {
+                    bleStartGattServer()
                     bleStartAdvertising()
-                } else {
-                    isAdvertising = false
                 }
             }
         }
     }
 
     private fun bleStartAdvertising() {
-        isAdvertising = true
-        bleStartGattServer()
-        bleAdvertiser.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
+        if (!isAdvertising) {
+            appendLog("Start advertising")
+            isAdvertising = true
+            bleAdvertiser.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
+        }
     }
 
     private fun bleStopAdvertising() {
-        isAdvertising = false
-        bleStopGattServer()
-        bleAdvertiser.stopAdvertising(advertiseCallback)
+        if (isAdvertising) {
+            appendLog("Stop advertising")
+            isAdvertising = false
+            bleAdvertiser.stopAdvertising(advertiseCallback)
+        }
     }
 
     private fun bleStartGattServer() {
+        appendLog("Start GATT Server")
+
         val gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
         val service = BluetoothGattService(
             UUID.fromString(SERVICE_UUID), BluetoothGattService.SERVICE_TYPE_PRIMARY
@@ -305,11 +344,6 @@ class MainActivity : AppCompatActivity() {
             BluetoothGattCharacteristic.PROPERTY_NOTIFY,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
-        val currentMusicDescriptor = BluetoothGattDescriptor(
-            UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID),
-            BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
-        )
-        currentMusicCharacteristic.addDescriptor(currentMusicDescriptor)
         service.addCharacteristic(currentMusicCharacteristic)
 
         val musicCoverCharacteristic = BluetoothGattCharacteristic(
@@ -334,9 +368,9 @@ class MainActivity : AppCompatActivity() {
     private fun bleStopGattServer() {
         gattServer?.close()
         gattServer = null
-        appendLog("gattServer closed")
+        appendLog("GATT server closed")
         runOnUiThread {
-            textViewConnectionState.text = getString(R.string.text_disconnected)
+            textViewConnectionState.text = getString(R.string.textDisconnected)
         }
     }
 
@@ -364,7 +398,7 @@ class MainActivity : AppCompatActivity() {
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            appendLog("Advertise start success\n$SERVICE_UUID")
+            appendLog("Advertise start success")
         }
 
         override fun onStartFailure(errorCode: Int) {
@@ -384,201 +418,30 @@ class MainActivity : AppCompatActivity() {
 
     //region BLE GATT server
     private var gattServer: BluetoothGattServer? = null
-    private var subscribedDevice: BluetoothDevice? = null
+    private var connectedDevice: BluetoothDevice? = null
 
-    private var mtu = 256
+    private var mtu = 512
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             runOnUiThread {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    textViewConnectionState.text = getString(R.string.text_connected)
+                    textViewConnectionState.text = getString(R.string.textConnected)
                     appendLog("Central did connect")
-                } else {
-                    textViewConnectionState.text = getString(R.string.text_disconnected)
+                    connectedDevice = device
+                    bleStopAdvertising()
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    textViewConnectionState.text = getString(R.string.textDisconnected)
                     appendLog("Central did disconnect")
-                    subscribedDevice = null
-                    updateSubscribersUI()
-                    updateCurrentMusic(null)
+                    connectedDevice = null
+                    bleStartAdvertising()
                 }
             }
         }
 
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
-            appendLog("onMtuChanged mtu=$mtu")
+            appendLog("MTU changed: $mtu")
             instance.mtu = mtu;
-        }
-
-        override fun onNotificationSent(device: BluetoothDevice, status: Int) {
-            appendLog("onNotificationSent status=$status")
-        }
-
-        override fun onCharacteristicReadRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            offset: Int,
-            characteristic: BluetoothGattCharacteristic
-        ) {
-            var log = "onCharacteristicRead offset=$offset"
-            if (characteristic.uuid == UUID.fromString(CHARACTERISTIC_CURRENT_MUSIC_UUID)) {
-                runOnUiThread {
-                    gattServer?.sendResponse(
-                        device,
-                        requestId,
-                        BluetoothGatt.GATT_SUCCESS,
-                        0,
-                        currentMusic.toByteArray(Charsets.UTF_8)
-                    )
-                    log += "\nresponse=success, value=\"$currentMusic\""
-                    appendLog(log)
-                }
-            } else {
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
-                log += "\nresponse=failure, unknown UUID\n${characteristic.uuid}"
-                appendLog(log)
-            }
-        }
-
-        override fun onCharacteristicWriteRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            characteristic: BluetoothGattCharacteristic,
-            preparedWrite: Boolean,
-            responseNeeded: Boolean,
-            offset: Int,
-            value: ByteArray?
-        ) {
-            var log =
-                "onCharacteristicWrite offset=$offset responseNeeded=$responseNeeded preparedWrite=$preparedWrite"
-            if (responseNeeded) {
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
-                log += "\nresponse=failure, unknown UUID\n${characteristic.uuid}"
-            } else {
-                log += "\nresponse=notNeeded, unknown UUID\n${characteristic.uuid}"
-            }
-            appendLog(log)
-        }
-
-        override fun onDescriptorReadRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            offset: Int,
-            descriptor: BluetoothGattDescriptor
-        ) {
-            var log = "onDescriptorReadRequest"
-            if (descriptor.uuid == UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID)) {
-                val returnValue = if (subscribedDevice != null) {
-                    log += " DESCRIPTOR response=ENABLE_NOTIFICATION"
-                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                } else {
-                    log += " DESCRIPTOR response=DISABLE_NOTIFICATION"
-                    BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
-                }
-                gattServer?.sendResponse(
-                    device, requestId, BluetoothGatt.GATT_SUCCESS, 0, returnValue
-                )
-            } else {
-                log += " unknown uuid=${descriptor.uuid}"
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
-            }
-            appendLog(log)
-        }
-
-        override fun onDescriptorWriteRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            descriptor: BluetoothGattDescriptor,
-            preparedWrite: Boolean,
-            responseNeeded: Boolean,
-            offset: Int,
-            value: ByteArray
-        ) {
-            var strLog = "onDescriptorWriteRequest"
-
-            if (descriptor.uuid == UUID.fromString(DESCRIPTOR_CURRENT_MUSIC_UUID)) {
-                var status = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED
-
-                if (descriptor.characteristic.uuid == UUID.fromString(
-                        CHARACTERISTIC_CURRENT_MUSIC_UUID
-                    )
-                ) {
-                    if (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
-                        subscribedDevice = device
-                        status = BluetoothGatt.GATT_SUCCESS
-                        strLog += ", subscribed"
-                        appendLog(strLog)
-
-                        if (responseNeeded) {
-                            gattServer?.sendResponse(device, requestId, status, 0, null)
-                        }
-                        updateSubscribersUI()
-
-                        val mediaSessionManager =
-                            getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
-
-                        val componentName =
-                            ComponentName(instance, NotificationListener::class.java)
-
-                        val updateCurrentMusicFromController = { controller: MediaController? ->
-                            if (controller != null) {
-                                updateCurrentMusic(controller.metadata)
-
-                                runOnUiThread {
-                                    controller.registerCallback(object :
-                                        MediaController.Callback() {
-                                        override fun onMetadataChanged(metadata: MediaMetadata?) {
-                                            updateCurrentMusic(metadata)
-                                        }
-                                    })
-                                }
-                            } else {
-                                appendLog("No media controller found")
-                                updateCurrentMusic(null)
-                            }
-                        }
-
-                        updateCurrentMusicFromController(
-                            mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
-                        )
-
-                        runOnUiThread {
-                            mediaSessionManager.addOnActiveSessionsChangedListener(
-                                { controllers ->
-                                    if (controllers?.getOrNull(0) != null) {
-                                        appendLog("New media session")
-                                        updateCurrentMusicFromController(controllers.get(0))
-                                    }
-                                }, componentName
-                            )
-                        }
-
-
-                    } else if (value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
-                        subscribedDevice = null
-                        status = BluetoothGatt.GATT_SUCCESS
-                        strLog += ", unsubscribed"
-                        appendLog(strLog)
-
-                        if (responseNeeded) {
-                            gattServer?.sendResponse(device, requestId, status, 0, null)
-                        }
-                        updateSubscribersUI()
-                        updateCurrentMusic(null)
-                    } else {
-                        strLog += ", unknown status: ${value[0]} ${value[1]}"
-                        appendLog(strLog)
-                    }
-                }
-            } else {
-                strLog += " unknown uuid=${descriptor.uuid}"
-                appendLog(strLog)
-
-                if (responseNeeded) {
-                    gattServer?.sendResponse(
-                        device, requestId, BluetoothGatt.GATT_FAILURE, 0, null
-                    )
-                }
-            }
         }
     }
 
