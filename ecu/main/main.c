@@ -7,21 +7,19 @@
 #include <lvgl.h>
 #include <math.h>
 
-#define TAG "ECU"
-
 #define ACK_CHECK_EN 0x1
 #define ACK_VAL 0x0
+#define BACKGROUND_COLOR lv_color_hex(0x101200)
+#define COLOR lv_color_hex(0xa4b700)
+#define DEVELOP 0
 #define NACK_VAL 0x1
 #define READ_BIT I2C_MASTER_READ
 #define TACHOMETER_I2C_ADDRESS 0x1
-
-#define BACKGROUND_COLOR lv_color_hex(0x101200)
-#define COLOR lv_color_hex(0xa4b700)
+#define TAG "ECU"
 
 const int BORDER_WIDTH = 5;
 const int INDICATOR_ANGLE_RANGE = 194;
-const int INDICATOR_DISPLAY_RANGE = 150;
-const int INDICATOR_REAL_RANGE = 6000;
+const int INDICATOR_RANGE = 6000;
 const int INDICATOR_ROTATION = 173;
 const int INDICATOR_POSITION_Y = 210;
 const int INDICATOR_WIDTH = 50;
@@ -183,7 +181,7 @@ void app_main() {
     lv_obj_set_style_radius(indic, 0, LV_PART_INDICATOR);
     lv_arc_set_rotation(indic, INDICATOR_ROTATION);
     lv_arc_set_bg_angles(indic, 0, INDICATOR_ANGLE_RANGE);
-    lv_arc_set_range(indic, 0, INDICATOR_DISPLAY_RANGE);
+    lv_arc_set_range(indic, 0, INDICATOR_RANGE);
     lv_obj_set_style_pad_all(indic, PADDING + BORDER_WIDTH, LV_PART_MAIN);
 
     static lv_style_t indic_style;
@@ -229,8 +227,8 @@ void app_main() {
 
     lv_obj_add_event(inner_scale, click_handler, LV_EVENT_CLICKED, NULL);
 
-    lv_scale_set_range(inner_scale, 0, INDICATOR_DISPLAY_RANGE);
-    lv_scale_set_total_tick_count(inner_scale, INDICATOR_DISPLAY_RANGE + 1);
+    lv_scale_set_range(inner_scale, 0, INDICATOR_RANGE);
+    lv_scale_set_total_tick_count(inner_scale, 151);
     lv_scale_set_major_tick_every(inner_scale, 25);
 
     lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_ITEMS);
@@ -247,7 +245,7 @@ void app_main() {
 
     lv_scale_section_t *main_section = lv_scale_add_section(inner_scale);
 
-    lv_scale_section_set_range(main_section, 0, INDICATOR_DISPLAY_RANGE);
+    lv_scale_section_set_range(main_section, 0, INDICATOR_RANGE);
     lv_scale_set_section_style_items(inner_scale, main_section, &tick_style);
     lv_scale_set_section_style_indicator(inner_scale, main_section, &tick_style);
 
@@ -357,7 +355,9 @@ void app_main() {
 
     lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
 
-    // lv_arc_set_value(indic, 5500 * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
+    if (DEVELOP) {
+      lv_arc_set_value(indic, 5500);
+    }
 
     lvgl_port_unlock();
   }
@@ -365,7 +365,9 @@ void app_main() {
   ESP_LOGI(TAG, "Initialize BLE");
   init_ble(set_current_music, set_music_cover);
 
-  return;
+  if (DEVELOP) {
+    return;
+  }
 
   while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");
@@ -383,7 +385,7 @@ void app_main() {
     } else if (ret == ESP_OK) {
       if (lvgl_port_lock(-1)) {
         uint16_t rpm = buffer[0] | (buffer[1] << 8);
-        lv_arc_set_value(indic, rpm * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
+        lv_arc_set_value(indic, rpm);
         lvgl_port_unlock();
         // ESP_LOGI(TAG, "rpm: %d\n", rpm);
       }
