@@ -357,7 +357,7 @@ void app_main() {
 
     lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
 
-    lv_arc_set_value(indic, 5500 * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
+    // lv_arc_set_value(indic, 5500 * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
 
     lvgl_port_unlock();
   }
@@ -365,7 +365,7 @@ void app_main() {
   ESP_LOGI(TAG, "Initialize BLE");
   init_ble(set_current_music, set_music_cover);
 
-  // return;
+  return;
 
   while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");
