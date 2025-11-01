@@ -54,7 +54,9 @@
 			"hci_common.h": "c",
 			"os.h": "c",
 			"syscfg.h": "c",
-			"nimble_npl.h": "c"
+			"nimble_npl.h": "c",
+			"cmath": "c",
+			"complex": "c"
 		}
 	}
 }

@@ -5,6 +5,7 @@
 #include "external/waveshare_twai_port.h"
 #include <driver/i2c.h>
 #include <lvgl.h>
+#include <math.h>
 
 #define TAG "ECU"
 
@@ -18,12 +19,15 @@
 #define COLOR lv_color_hex(0xa4b700)
 
 const int BORDER_WIDTH = 5;
+const int INDICATOR_ANGLE_RANGE = 194;
 const int INDICATOR_DISPLAY_RANGE = 150;
 const int INDICATOR_REAL_RANGE = 6000;
-const int INDICATOR_WIDTH = 44;
+const int INDICATOR_ROTATION = 173;
+const int INDICATOR_POSITION_Y = 210;
+const int INDICATOR_WIDTH = 50;
 const int LABELS_GAP = 30;
 const int PADDING = 10;
-const int SCALE_SIZE = 940;
+const int SCALE_SIZE = 980;
 const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
 const int TICK_WIDTH = 2;
 
@@ -169,7 +173,7 @@ void app_main() {
     indic = lv_arc_create(lv_screen_active());
 
     lv_obj_remove_style(indic, NULL, LV_PART_KNOB);
-    lv_obj_align(indic, LV_ALIGN_CENTER, 0, 250);
+    lv_obj_align(indic, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
     lv_obj_set_size(indic, SCALE_SIZE, SCALE_SIZE);
     lv_obj_set_style_arc_opa(indic, 0, LV_PART_MAIN);
     lv_obj_set_style_arc_color(indic, COLOR, LV_PART_INDICATOR);
@@ -177,8 +181,8 @@ void app_main() {
     lv_obj_set_style_arc_width(indic, INDICATOR_WIDTH, LV_PART_INDICATOR);
     lv_obj_set_style_radius(indic, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(indic, 0, LV_PART_INDICATOR);
-    lv_arc_set_rotation(indic, 180);
-    lv_arc_set_bg_angles(indic, 0, 180);
+    lv_arc_set_rotation(indic, INDICATOR_ROTATION);
+    lv_arc_set_bg_angles(indic, 0, INDICATOR_ANGLE_RANGE);
     lv_arc_set_range(indic, 0, INDICATOR_DISPLAY_RANGE);
     lv_obj_set_style_pad_all(indic, PADDING + BORDER_WIDTH, LV_PART_MAIN);
 
@@ -199,17 +203,17 @@ void app_main() {
     lv_scale_set_mode(inner_scale, LV_SCALE_MODE_ROUND_INNER);
     lv_scale_set_mode(outer_scale, LV_SCALE_MODE_ROUND_OUTER);
 
-    lv_obj_align(inner_scale, LV_ALIGN_CENTER, 0, 250);
-    lv_obj_align(outer_scale, LV_ALIGN_CENTER, 0, 250);
+    lv_obj_align(inner_scale, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
+    lv_obj_align(outer_scale, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
 
     lv_obj_set_size(inner_scale, SCALE_SIZE, SCALE_SIZE);
     lv_obj_set_size(outer_scale, SCALE_SIZE, SCALE_SIZE);
 
-    lv_scale_set_angle_range(inner_scale, 180);
-    lv_scale_set_angle_range(outer_scale, 180);
+    lv_scale_set_angle_range(inner_scale, INDICATOR_ANGLE_RANGE);
+    lv_scale_set_angle_range(outer_scale, INDICATOR_ANGLE_RANGE);
 
-    lv_scale_set_rotation(inner_scale, 180);
-    lv_scale_set_rotation(outer_scale, 180);
+    lv_scale_set_rotation(inner_scale, INDICATOR_ROTATION);
+    lv_scale_set_rotation(outer_scale, INDICATOR_ROTATION);
 
     static lv_style_t main_line_style;
 
@@ -286,18 +290,35 @@ void app_main() {
       {end_line_width - 1, 2},
       {end_line_width, 0}
     };
+    static lv_point_precise_t end_line_points_left[12];
+    static lv_point_precise_t end_line_points_right[12];
 
-    lv_obj_t *end_line_1 = lv_line_create(inner_scale);
+    double angle_rad = 7.0 * M_PI / 180.0;
+    double x;
+    double y;
 
-    lv_line_set_points(end_line_1, end_line_points, 12);
-    lv_obj_add_style(end_line_1, &line_style, 0);
-    lv_obj_align(end_line_1, LV_ALIGN_LEFT_MID, 0, 3);
+    for (int i = 0; i < 12; i++) {
+      x = end_line_points[i].x;
+      y = end_line_points[i].y;
 
-    lv_obj_t *end_line_2 = lv_line_create(inner_scale);
+      end_line_points_left[i].x = x * cos(angle_rad) + y * sin(angle_rad);
+      end_line_points_left[i].y = -x * sin(angle_rad) + y * cos(angle_rad);
 
-    lv_line_set_points(end_line_2, end_line_points, 12);
-    lv_obj_add_style(end_line_2, &line_style, 0);
-    lv_obj_align(end_line_2, LV_ALIGN_RIGHT_MID, 0, 3);
+      end_line_points_right[i].x = x * cos(angle_rad) - y * sin(angle_rad);
+      end_line_points_right[i].y = x * sin(angle_rad) + y * cos(angle_rad);
+    }
+
+    lv_obj_t *end_line_left = lv_line_create(inner_scale);
+
+    lv_line_set_points(end_line_left, end_line_points_left, 12);
+    lv_obj_add_style(end_line_left, &line_style, 0);
+    lv_obj_align(end_line_left, LV_ALIGN_LEFT_MID, 4, 58);
+
+    lv_obj_t *end_line_right = lv_line_create(inner_scale);
+
+    lv_line_set_points(end_line_right, end_line_points_right, 12);
+    lv_obj_add_style(end_line_right, &line_style, 0);
+    lv_obj_align(end_line_right, LV_ALIGN_RIGHT_MID, -4, 58);
 
     // Add twingo logo
 
@@ -307,7 +328,7 @@ void app_main() {
     lv_img_set_src(logo_img, &twingo_logo);
     lv_obj_set_style_img_recolor_opa(logo_img, LV_OPA_100, 0);
     lv_obj_set_style_img_recolor(logo_img, COLOR, 0);
-    lv_obj_align(logo_img, LV_ALIGN_CENTER, 0, -150);
+    lv_obj_align(logo_img, LV_ALIGN_CENTER, 0, -170);
 
     // Add current music
 
@@ -336,13 +357,15 @@ void app_main() {
 
     lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
 
-    // lv_arc_set_value(indic, 5500 * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
+    lv_arc_set_value(indic, 5500 * INDICATOR_DISPLAY_RANGE / INDICATOR_REAL_RANGE);
 
     lvgl_port_unlock();
   }
 
   ESP_LOGI(TAG, "Initialize BLE");
   init_ble(set_current_music, set_music_cover);
+
+  // return;
 
   while (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");
