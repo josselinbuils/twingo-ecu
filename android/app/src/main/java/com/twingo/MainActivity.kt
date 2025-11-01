@@ -295,5 +295,4 @@ class MainActivity : AppCompatActivity() {
     private fun Activity.requestPermissionArray(permissions: Array<String>, requestCode: Int) {
         ActivityCompat.requestPermissions(this, permissions, requestCode)
     }
-    //endregion
 }

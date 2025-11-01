@@ -63,10 +63,10 @@ class Synchronizer : Service() {
         BluetoothGattCharacteristic.PERMISSION_READ
     )
 
-    private val binder = LocalBinder()
-    private val bleAdvertiser by lazy {
+    private val advertiser by lazy {
         bluetoothAdapter.bluetoothLeAdvertiser
     }
+    private val binder = LocalBinder()
     private val bluetoothAdapter: BluetoothAdapter by lazy {
         bluetoothManager.adapter
     }
@@ -116,12 +116,12 @@ class Synchronizer : Service() {
                 sendState("CENTRAL_CONNECTED")
                 appendLog("Central did connect")
                 connectedDevice = device
-                bleStopAdvertising()
+                stopAdvertising()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 sendState("CENTRAL_DISCONNECTED")
                 appendLog("Central did disconnect")
                 connectedDevice = null
-                bleStartAdvertising()
+                startAdvertising()
             }
         }
 
@@ -259,8 +259,10 @@ class Synchronizer : Service() {
             this, 1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         )
 
-        bleStartGattServer()
-        bleStartAdvertising()
+        if (gattServer == null) {
+            startGattServer()
+            startAdvertising()
+        }
     }
 
     private fun sendState(state: String) {
@@ -269,23 +271,23 @@ class Synchronizer : Service() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
-    private fun bleStartAdvertising() {
+    private fun startAdvertising() {
         if (!isAdvertising) {
             appendLog("Start advertising")
             isAdvertising = true
-            bleAdvertiser.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
+            advertiser.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
         }
     }
 
-    private fun bleStopAdvertising() {
+    private fun stopAdvertising() {
         if (isAdvertising) {
             appendLog("Stop advertising")
             isAdvertising = false
-            bleAdvertiser.stopAdvertising(advertiseCallback)
+            advertiser.stopAdvertising(advertiseCallback)
         }
     }
 
-    private fun bleStartGattServer() {
+    private fun startGattServer() {
         appendLog("Start GATT Server")
 
         val gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
