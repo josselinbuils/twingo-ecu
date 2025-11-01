@@ -108,8 +108,8 @@ void set_current_music(char *current_music) {
 
     lv_obj_set_width(music_title_label, label_size.x);
     lv_obj_set_width(music_artist_label, label_size.x);
-    lv_obj_align(music_title_label, LV_ALIGN_CENTER, left, -15);
-    lv_obj_align(music_artist_label, LV_ALIGN_CENTER, left, 21);
+    lv_obj_align(music_title_label, LV_ALIGN_BOTTOM_MID, left, -55);
+    lv_obj_align(music_artist_label, LV_ALIGN_BOTTOM_MID, left, -21);
     lv_label_set_text(music_title_label, music_title);
     lv_label_set_text(music_artist_label, music_artist);
     lvgl_port_unlock();
@@ -336,14 +336,14 @@ void app_main() {
     lv_style_set_text_color(&label_style, COLOR);
     lv_style_set_text_font(&label_style, &lv_font_montserrat_28);
 
-    music_title_label = lv_label_create(inner_scale);
+    music_title_label = lv_label_create(lv_screen_active());
 
     lv_obj_set_height(music_title_label, 30);
     lv_label_set_long_mode(music_title_label, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_add_style(music_title_label, &label_style, 0);
     lv_label_set_text(music_title_label, "");
 
-    music_artist_label = lv_label_create(inner_scale);
+    music_artist_label = lv_label_create(lv_screen_active());
 
     lv_obj_set_height(music_artist_label, 30);
     lv_label_set_long_mode(music_artist_label, LV_LABEL_LONG_MODE_DOTS);
