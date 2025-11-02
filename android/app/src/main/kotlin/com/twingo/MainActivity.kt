@@ -155,6 +155,7 @@ class MainActivity : AppCompatActivity() {
         synchronizer?.registerMediaController()
     }
 
+    @Suppress("unused")
     fun onTapSend(view: View) {
         val synchronizer = synchronizer
 
@@ -165,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @Suppress("unused")
     fun onTapClearLog(view: View) {
         textViewLog.text = ""
         appendLog("Logs cleared")
