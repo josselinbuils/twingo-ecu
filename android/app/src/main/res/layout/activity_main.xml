@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layout_marginTop="96dp"
+    android:layout_marginTop="64dp"
     tools:context=".MainActivity">
 
     <TextView
@@ -14,7 +14,6 @@
         android:layout_marginStart="16dp"
         android:layout_marginTop="16dp"
         android:layout_marginEnd="16dp"
-        android:background="@drawable/img_gray_border"
         android:text="@string/textDisconnected"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"
@@ -58,20 +57,20 @@
 
     <ImageView
         android:id="@+id/musicCover"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:contentDescription=""
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/editTextCurrentMusicCharacteristic" />
 
     <ImageView
         android:id="@+id/grayscaleMusicCover"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:contentDescription=""
         app:layout_constraintStart_toEndOf="@+id/musicCover"
         app:layout_constraintTop_toBottomOf="@+id/editTextCurrentMusicCharacteristic" />
@@ -80,13 +79,12 @@
         android:id="@+id/scrollViewLog"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="10dp"
-        android:layout_marginTop="24dp"
-        android:layout_marginEnd="10dp"
-        android:layout_marginBottom="10dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
         android:layout_weight="1"
-        android:background="@drawable/img_gray_border"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/buttonClearLog"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
@@ -103,16 +101,11 @@
         android:id="@+id/buttonClearLog"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="4dp"
-        android:minWidth="48dip"
-        android:minHeight="32dip"
+        android:layout_marginBottom="16dp"
+        android:layout_marginEnd="16dp"
         android:onClick="onTapClearLog"
-        android:paddingLeft="8dp"
-        android:paddingTop="4dp"
-        android:paddingRight="8dp"
-        android:paddingBottom="4dp"
         android:text="@string/buttonClearLogs"
-        app:layout_constraintEnd_toEndOf="@+id/scrollViewLog"
-        app:layout_constraintTop_toTopOf="@+id/scrollViewLog" />
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

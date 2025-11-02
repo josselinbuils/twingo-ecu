@@ -16,6 +16,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -29,6 +30,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.graphics.scale
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -71,7 +73,15 @@ class MainActivity : AppCompatActivity() {
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == "Log") {
+            if (intent.action == "Bitmaps") {
+                val bitmap = intent.getParcelableExtra("bitmap", Bitmap::class.java)
+                val grayscaleBitmap = intent.getParcelableExtra("grayscaleBitmap", Bitmap::class.java)
+
+                runOnUiThread {
+                    musicCover.setImageBitmap(bitmap?.scale(128, 128))
+                    grayscaleMusicCover.setImageBitmap(grayscaleBitmap?.scale(128, 128))
+                }
+            } else if (intent.action == "Log") {
                 val message = intent.getStringExtra("message")
 
                 if (message != null) {
@@ -117,6 +127,7 @@ class MainActivity : AppCompatActivity() {
 
             val intentFilter = IntentFilter()
 
+            intentFilter.addAction("Bitmaps")
             intentFilter.addAction("Log")
             intentFilter.addAction("State")
             intentFilter.addAction("NotificationCanceled")
@@ -247,11 +258,13 @@ class MainActivity : AppCompatActivity() {
                     completion(isSuccess)
                 } else {
                     // start activity for the request again
+                    @Suppress("DEPRECATION")
                     startActivityForResult(Intent(intentString), requestCode)
                 }
             }
 
             // start activity for the request
+            @Suppress("DEPRECATION")
             startActivityForResult(Intent(intentString), requestCode)
         }
     }

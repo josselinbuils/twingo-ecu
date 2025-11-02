@@ -125,6 +125,10 @@ class Synchronizer : Service() {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 sendState("CENTRAL_CONNECTED")
                 appendLog("Central did connect")
+                registerMediaControllerHandler?.removeCallbacks(registerMediaControllerTask)
+                mediaController?.unregisterCallback(mediaControllerCallback)
+                currentTitle = null
+                mediaController = null
                 connectedDevice = device
                 stopAdvertising()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -230,6 +234,13 @@ class Synchronizer : Service() {
         } else {
             appendLog("No media controller found")
         }
+    }
+
+    private fun sendBitmaps(bitmap: Bitmap, grayscaleBitmap: Bitmap) {
+        val intent = Intent("Bitmaps")
+        intent.putExtra("bitmap", bitmap)
+        intent.putExtra("grayscaleBitmap", grayscaleBitmap)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
     fun sendNotification(uuid: String, data: ByteArray, split: Boolean = false) {
@@ -418,10 +429,7 @@ class Synchronizer : Service() {
                     (255 and 0xff) shl 24 or (grayscaleData[index] and 0xff) shl 16 or (grayscaleData[index] and 0xff) shl 8 or (grayscaleData[index] and 0xff)
             }
 
-//                runOnUiThread {
-//                    musicCover.setImageBitmap(bitmap)
-//                    grayscaleMusicCover.setImageBitmap(grayscaleBitmap)
-//                }
+            sendBitmaps(bitmap, grayscaleBitmap)
 
             sendNotification(CHARACTERISTIC_CURRENT_MUSIC_UUID, music.toByteArray(Charsets.UTF_8))
             sendNotification(CHARACTERISTIC_MUSIC_COVER_UUID, grayscaleDataBytes, true)
