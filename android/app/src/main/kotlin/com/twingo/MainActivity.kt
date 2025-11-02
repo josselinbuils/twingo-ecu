@@ -40,24 +40,18 @@ private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 
 class MainActivity : AppCompatActivity() {
-    private val bluetoothAdapter: BluetoothAdapter by lazy {
-        bluetoothManager.adapter
-    }
-    private val bluetoothManager: BluetoothManager by lazy {
-        getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
-    }
     private val editTextCurrentMusicCharacteristic: EditText
-        get() = findViewById(R.id.editTextCurrentMusicCharacteristic)
+        get() = findViewById(R.id.edit_current_music)
     private val grayscaleMusicCover: ImageView
-        get() = findViewById(R.id.grayscaleMusicCover)
+        get() = findViewById(R.id.image_grayscale_music_cover)
     private val musicCover: ImageView
-        get() = findViewById(R.id.musicCover)
+        get() = findViewById(R.id.image_music_cover)
     private val scrollViewLog: ScrollView
-        get() = findViewById(R.id.scrollViewLog)
+        get() = findViewById(R.id.scroll_logs)
     private val textViewConnectionState: TextView
-        get() = findViewById(R.id.textViewConnectionState)
+        get() = findViewById(R.id.text_connection_state)
     private val textViewLog: TextView
-        get() = findViewById(R.id.textViewLog)
+        get() = findViewById(R.id.text_logs)
     private var synchronizer: Synchronizer? = null
     private val synchronizerConnection = object : ServiceConnection {
 
@@ -73,28 +67,38 @@ class MainActivity : AppCompatActivity() {
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == "Bitmaps") {
-                val bitmap = intent.getParcelableExtra("bitmap", Bitmap::class.java)
-                val grayscaleBitmap = intent.getParcelableExtra("grayscaleBitmap", Bitmap::class.java)
+            if (intent.action == Synchronizer.Constants.INTENT_BITMAPS) {
+                val bitmap = intent.getParcelableExtra(
+                    Synchronizer.Constants.INTENT_BITMAPS_BITMAP,
+                    Bitmap::class.java
+                )
+                val grayscaleBitmap =
+                    intent.getParcelableExtra(
+                        Synchronizer.Constants.INTENT_BITMAPS_GRAYSCALE_BITMAP,
+                        Bitmap::class.java
+                    )
 
                 runOnUiThread {
                     musicCover.setImageBitmap(bitmap?.scale(128, 128))
                     grayscaleMusicCover.setImageBitmap(grayscaleBitmap?.scale(128, 128))
                 }
-            } else if (intent.action == "Log") {
-                val message = intent.getStringExtra("message")
+            } else if (intent.action == Synchronizer.Constants.INTENT_LOG) {
+                val message = intent.getStringExtra(Synchronizer.Constants.INTENT_LOG_MESSAGE)
 
                 if (message != null) {
-                    appendLog(message, "R")
+                    appendLog(message)
                 }
-            } else if (intent.action == "State") {
-                val state = intent.getStringExtra("state")
+            } else if (intent.action == Synchronizer.Constants.INTENT_STATE) {
+                val state = intent.getStringExtra(Synchronizer.Constants.INTENT_STATE_STATE)
 
                 runOnUiThread {
-                    if (state == "CENTRAL_CONNECTED") {
-                        textViewConnectionState.text = getString(R.string.textConnected)
-                    } else if (state == "CENTRAL_DISCONNECTED" || state == "GATT_SERVER_CLOSED") {
-                        textViewConnectionState.text = getString(R.string.textDisconnected)
+                    if (state == Synchronizer.Constants.STATE_CENTRAL_CONNECTED) {
+                        textViewConnectionState.text = getString(R.string.text_connected)
+                    } else if (
+                        state == Synchronizer.Constants.STATE_CENTRAL_DISCONNECTED ||
+                        state == Synchronizer.Constants.STATE_GATT_SERVER_CLOSED
+                    ) {
+                        textViewConnectionState.text = getString(R.string.text_disconnected)
                     }
                 }
             }
@@ -104,9 +108,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        appendLog("MainActivity.onCreate")
-
+        appendLog("Activity created")
         grantAppPermissions(AskType.AskOnce) { isGranted ->
             if (!isGranted) {
                 appendLog("⚠️Permission issue")
@@ -127,10 +129,10 @@ class MainActivity : AppCompatActivity() {
 
             val intentFilter = IntentFilter()
 
-            intentFilter.addAction("Bitmaps")
-            intentFilter.addAction("Log")
-            intentFilter.addAction("State")
-            intentFilter.addAction("NotificationCanceled")
+            intentFilter.addAction(Synchronizer.Constants.INTENT_BITMAPS)
+            intentFilter.addAction(Synchronizer.Constants.INTENT_LOG)
+            intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED)
+            intentFilter.addAction(Synchronizer.Constants.INTENT_STATE)
 
             LocalBroadcastManager.getInstance(this)
                 .registerReceiver(broadcastReceiver, intentFilter)
@@ -149,35 +151,31 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        appendLog("Resume")
+        appendLog("Activity resumed")
         synchronizer?.registerMediaController()
     }
 
-    @Suppress("unused")
     fun onTapSend(view: View) {
         val synchronizer = synchronizer
 
         if (synchronizer != null) {
             val text = editTextCurrentMusicCharacteristic.text.toString()
             val data = text.toByteArray(Charsets.UTF_8)
-            synchronizer.sendNotification(
-                synchronizer.currentMusicCharacteristic.uuid.toString(), data
-            )
+            synchronizer.sendNotification(Synchronizer.UUID_CHARACTERISTIC_CURRENT_MUSIC, data)
         }
     }
 
-    @Suppress("unused")
     fun onTapClearLog(view: View) {
         textViewLog.text = ""
         appendLog("Logs cleared")
     }
 
     @SuppressLint("SetTextI18n")
-    private fun appendLog(message: String, tag: String = "A") {
+    private fun appendLog(message: String) {
         Log.d("appendLog", message)
         runOnUiThread {
             val strTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-            textViewLog.text = textViewLog.text.toString() + "[$strTime] [$tag] $message\n"
+            textViewLog.text = textViewLog.text.toString() + "[$strTime] $message\n"
 
             // scroll after delay, because textView has to be updated first
             Handler(Looper.getMainLooper()).postDelayed({
@@ -244,7 +242,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enableBluetooth(askType: AskType, completion: (Boolean) -> Unit) {
-        if (bluetoothAdapter.isEnabled) {
+        val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
+
+        if (bluetoothManager.adapter.isEnabled) {
             completion(true)
         } else {
             val intentString = BluetoothAdapter.ACTION_REQUEST_ENABLE

@@ -8,31 +8,31 @@
     tools:context=".MainActivity">
 
     <TextView
-        android:id="@+id/textViewConnectionState"
+        android:id="@+id/text_connection_state"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginTop="16dp"
         android:layout_marginEnd="16dp"
-        android:text="@string/textDisconnected"
+        android:text="@string/text_disconnected"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
-        android:id="@+id/textViewHintCurrentMusicCharacteristic"
+        android:id="@+id/text_notify_characteristic"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
-        android:text="@string/textStaticCurrentMusicCharacteristic"
+        android:text="@string/text_notify_characteristic"
         android:textSize="12sp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textViewConnectionState" />
+        app:layout_constraintTop_toBottomOf="@+id/text_connection_state" />
 
     <EditText
-        android:id="@+id/editTextCurrentMusicCharacteristic"
+        android:id="@+id/edit_current_music"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
@@ -40,43 +40,46 @@
         android:autofillHints=""
         android:ems="10"
         android:inputType="text"
-        android:text="Current music"
-        app:layout_constraintEnd_toStartOf="@+id/buttonNotify"
+        android:text="@string/text_current_music"
+        app:layout_constraintEnd_toStartOf="@+id/button_notify"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/textViewHintCurrentMusicCharacteristic" />
+        app:layout_constraintTop_toBottomOf="@+id/text_notify_characteristic"
+        tools:ignore="LabelFor" />
 
     <Button
-        android:id="@+id/buttonNotify"
+        android:id="@+id/button_notify"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
         android:onClick="onTapSend"
-        android:text="@string/buttonNotify"
-        app:layout_constraintBaseline_toBaselineOf="@+id/editTextCurrentMusicCharacteristic"
+        android:text="@string/button_notify"
+        app:layout_constraintBaseline_toBaselineOf="@+id/edit_current_music"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <ImageView
-        android:id="@+id/musicCover"
+        android:id="@+id/image_music_cover"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:contentDescription=""
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/editTextCurrentMusicCharacteristic" />
+        app:layout_constraintTop_toBottomOf="@+id/edit_current_music"
+        tools:ignore="ContentDescription" />
 
     <ImageView
-        android:id="@+id/grayscaleMusicCover"
+        android:id="@+id/image_grayscale_music_cover"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:contentDescription=""
-        app:layout_constraintStart_toEndOf="@+id/musicCover"
-        app:layout_constraintTop_toBottomOf="@+id/editTextCurrentMusicCharacteristic" />
+        app:layout_constraintStart_toEndOf="@+id/image_music_cover"
+        app:layout_constraintTop_toBottomOf="@+id/edit_current_music"
+        tools:ignore="ContentDescription" />
 
     <ScrollView
-        android:id="@+id/scrollViewLog"
+        android:id="@+id/scroll_logs"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginStart="16dp"
@@ -84,27 +87,27 @@
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
         android:layout_weight="1"
-        app:layout_constraintBottom_toTopOf="@+id/buttonClearLog"
+        app:layout_constraintBottom_toTopOf="@+id/button_clear"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/musicCover">
+        app:layout_constraintTop_toBottomOf="@+id/image_music_cover">
 
         <TextView
-            android:id="@+id/textViewLog"
+            android:id="@+id/text_logs"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
 
     </ScrollView>
 
     <Button
-        android:id="@+id/buttonClearLog"
+        android:id="@+id/button_clear"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
         android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
         android:onClick="onTapClearLog"
-        android:text="@string/buttonClearLogs"
+        android:text="@string/button_clear"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
