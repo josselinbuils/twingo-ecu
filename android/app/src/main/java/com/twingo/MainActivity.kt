@@ -2,6 +2,8 @@ package com.twingo
 
 import android.Manifest.permission.BLUETOOTH_ADVERTISE
 import android.Manifest.permission.BLUETOOTH_CONNECT
+import android.Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
+import android.Manifest.permission.POST_NOTIFICATIONS
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
@@ -55,45 +57,35 @@ class MainActivity : AppCompatActivity() {
     private val textViewLog: TextView
         get() = findViewById(R.id.textViewLog)
     private var synchronizer: Synchronizer? = null
-    private var synchronizerBound: Boolean = false
-
     private val synchronizerConnection = object : ServiceConnection {
 
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
             appendLog("Synchronizer service connected")
-
-            val binder = service as Synchronizer.LocalBinder
-            synchronizer = binder.getService()
-            synchronizerBound = true
+            synchronizer = (service as Synchronizer.LocalBinder).getService()
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
             appendLog("Synchronizer service disconnected")
-
-            synchronizerBound = false
-            synchronizer = null
         }
     }
 
-    private val synchronizerLogReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent) {
-            val message = intent.getStringExtra("message")
+    private val broadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "Log") {
+                val message = intent.getStringExtra("message")
 
-            if (message != null) {
-                appendLog(message)
-            }
-        }
-    }
+                if (message != null) {
+                    appendLog(message, "R")
+                }
+            } else if (intent.action == "State") {
+                val state = intent.getStringExtra("state")
 
-    private val synchronizerStateReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent) {
-            val state = intent.getStringExtra("state")
-
-            runOnUiThread {
-                if (state == "CENTRAL_CONNECTED") {
-                    textViewConnectionState.text = getString(R.string.textConnected)
-                } else if (state == "CENTRAL_DISCONNECTED") {
-                    textViewConnectionState.text = getString(R.string.textDisconnected)
+                runOnUiThread {
+                    if (state == "CENTRAL_CONNECTED") {
+                        textViewConnectionState.text = getString(R.string.textConnected)
+                    } else if (state == "CENTRAL_DISCONNECTED" || state == "GATT_SERVER_CLOSED") {
+                        textViewConnectionState.text = getString(R.string.textDisconnected)
+                    }
                 }
             }
         }
@@ -123,12 +115,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            LocalBroadcastManager.getInstance(this).registerReceiver(
-                synchronizerLogReceiver, IntentFilter("Log")
-            )
-            LocalBroadcastManager.getInstance(this).registerReceiver(
-                synchronizerStateReceiver, IntentFilter("State")
-            )
+            val intentFilter = IntentFilter()
+
+            intentFilter.addAction("Log")
+            intentFilter.addAction("State")
+            intentFilter.addAction("NotificationCanceled")
+
+            LocalBroadcastManager.getInstance(this)
+                .registerReceiver(broadcastReceiver, intentFilter)
 
             ensureBluetoothCanBeUsed { isSuccess, message ->
                 runOnUiThread {
@@ -156,8 +150,7 @@ class MainActivity : AppCompatActivity() {
             val text = editTextCurrentMusicCharacteristic.text.toString()
             val data = text.toByteArray(Charsets.UTF_8)
             synchronizer.sendNotification(
-                synchronizer.currentMusicCharacteristic.uuid.toString(),
-                data
+                synchronizer.currentMusicCharacteristic.uuid.toString(), data
             )
         }
     }
@@ -169,11 +162,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     @SuppressLint("SetTextI18n")
-    private fun appendLog(message: String) {
+    private fun appendLog(message: String, tag: String = "A") {
         Log.d("appendLog", message)
         runOnUiThread {
             val strTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-            textViewLog.text = textViewLog.text.toString() + "[$strTime] $message\n"
+            textViewLog.text = textViewLog.text.toString() + "[$strTime] [$tag] $message\n"
 
             // scroll after delay, because textView has to be updated first
             Handler(Looper.getMainLooper()).postDelayed({
@@ -266,7 +259,10 @@ class MainActivity : AppCompatActivity() {
     private fun grantAppPermissions(
         askType: AskType, completion: (Boolean) -> Unit
     ) {
-        val wantedPermissions = arrayOf(BLUETOOTH_CONNECT, BLUETOOTH_ADVERTISE)
+        val wantedPermissions = arrayOf(
+            BLUETOOTH_CONNECT, BLUETOOTH_ADVERTISE, FOREGROUND_SERVICE_CONNECTED_DEVICE,
+            POST_NOTIFICATIONS
+        )
 
         if (hasPermissions(wantedPermissions)) {
             completion(true)

@@ -1,9 +1,8 @@
 package com.twingo
 
-import android.Manifest.permission.BLUETOOTH_ADVERTISE
-import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -16,19 +15,23 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.os.Binder
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
+import android.os.Looper
 import android.os.ParcelUuid
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
-import androidx.core.content.PermissionChecker
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import androidx.core.graphics.set
@@ -42,7 +45,8 @@ import kotlin.math.min
 private const val CHARACTERISTIC_CURRENT_MUSIC_UUID = "39394651-8477-4ffa-bc10-dfef56583a29"
 private const val CHARACTERISTIC_MUSIC_COVER_UUID = "39394653-8477-4ffa-bc10-dfef56583a29"
 private const val DEBUG = false
-private const val NOTIFICATION_CHANNEL_ID = "SynchronizerChannel"
+private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
+private const val REGISTER_CONTROLLER_INTERVAL_MS = 10000
 private const val SERVICE_UUID = "39394650-8477-4ffa-bc10-dfef56583a29"
 
 class Synchronizer : Service() {
@@ -75,9 +79,11 @@ class Synchronizer : Service() {
 
     private var currentTitle: String? = null
     private var gattServer: BluetoothGattServer? = null
+    private val handlerThread = HandlerThread("background-handler-thread")
     private val instance = this
     private var isAdvertising = false
     private var mediaController: MediaController? = null
+    private var registerMediaControllerHandler: Handler? = null
     private var mtu = 512
 
     private val advertiseSettings =
@@ -108,6 +114,12 @@ class Synchronizer : Service() {
         }
     }
 
+    private val broadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            appendLog(intent.action.toString())
+        }
+    }
+
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
@@ -118,9 +130,10 @@ class Synchronizer : Service() {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 sendState("CENTRAL_DISCONNECTED")
                 appendLog("Central did disconnect")
+                registerMediaControllerHandler?.removeCallbacks(registerMediaControllerTask)
+                mediaController?.unregisterCallback(mediaControllerCallback)
                 connectedDevice = null
                 currentTitle = null
-                mediaController?.unregisterCallback(mediaControllerCallback)
                 mediaController = null
                 startAdvertising()
             }
@@ -129,7 +142,7 @@ class Synchronizer : Service() {
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
             appendLog("MTU changed: $mtu")
             instance.mtu = mtu
-            registerMediaController()
+            registerMediaControllerTask.run() // Device is ready to receive messages
         }
     }
 
@@ -152,7 +165,51 @@ class Synchronizer : Service() {
         }
     }
 
+    val registerMediaControllerTask: Runnable = Runnable {
+        registerMediaController()
+
+        if (registerMediaControllerHandler == null) {
+            appendLog("registerMediaControllerHandler not initialised")
+        }
+        registerMediaControllerHandler?.postDelayed(
+            { registerMediaControllerTask.run() }, REGISTER_CONTROLLER_INTERVAL_MS.toLong()
+        )
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return binder
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+        registerMediaControllerHandler?.removeCallbacks(registerMediaControllerTask)
+        handlerThread.quitSafely()
+        mediaController?.unregisterCallback(mediaControllerCallback)
+        stopAdvertising()
+        gattServer?.close()
+        connectedDevice = null
+        currentTitle = null
+        mediaController = null
+        gattServer = null
+        appendLog("GATT server closed")
+        sendState("GATT_SERVER_CLOSED")
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startAsForegroundService()
+        return START_STICKY
+    }
+
+    private fun appendLog(message: String) {
+        val intent = Intent("Log")
+        intent.putExtra("message", message)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
     fun registerMediaController() {
+        appendLog("Register media controller")
+
         val mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         val componentName = ComponentName(instance, NotificationListener::class.java)
         val controller = mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
@@ -165,6 +222,7 @@ class Synchronizer : Service() {
             val newCurrentTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
 
             if (newCurrentTitle != currentTitle) {
+                appendLog("Current music changed")
                 currentTitle = newCurrentTitle
                 sendCurrentMusic(metadata)
             }
@@ -191,6 +249,8 @@ class Synchronizer : Service() {
                 val numberOfNotifications =
                     ceil(data.size.toDouble() / notificationDataByteSize).toInt()
 
+                appendLog("Sending $numberOfNotifications notifications: ${data.size} bytes")
+
                 for (index in 0..<numberOfNotifications) {
                     val offset = notificationDataByteSize * (numberOfNotifications - index - 1)
 
@@ -200,7 +260,6 @@ class Synchronizer : Service() {
                         offset, min(offset + notificationDataByteSize, data.size)
                     )
 
-                    appendLog("Sending notification: ${index + 1}/${numberOfNotifications} ${notificationData.size} bytes")
                     server.notifyCharacteristicChanged(
                         device, characteristic, false, notificationData
                     )
@@ -211,72 +270,6 @@ class Synchronizer : Service() {
                     device, characteristic, false, data
                 )
             }
-        }
-    }
-
-    private fun appendLog(message: String) {
-        val intent = Intent("Log")
-        intent.putExtra("message", "[S] $message")
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-    }
-
-    override fun onBind(intent: Intent?): IBinder? {
-        return binder
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val advertisePermission = PermissionChecker.checkSelfPermission(this, BLUETOOTH_ADVERTISE)
-        val connectPermission = PermissionChecker.checkSelfPermission(this, BLUETOOTH_CONNECT)
-
-        if (advertisePermission != PermissionChecker.PERMISSION_GRANTED && connectPermission != PermissionChecker.PERMISSION_GRANTED) {
-            appendLog("Required permissions have not been granted, stopping service")
-            stopSelf()
-        } else {
-            startAsForegroundService()
-        }
-        return super.onStartCommand(intent, flags, startId)
-    }
-
-    private fun startAsForegroundService() {
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_LOW
-        )
-        channel.description = "Channel for Twingo's Synchronizer foreground service notification"
-
-        val notificationManager = getSystemService(NotificationManager::class.java)
-
-        notificationManager.createNotificationChannel(channel)
-
-        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID).build()
-
-        ServiceCompat.startForeground(
-            this, 1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        )
-
-        if (gattServer == null) {
-            appendLog("Start service")
-
-            startGattServer()
-            startAdvertising()
-
-            val mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
-            val componentName = ComponentName(instance, NotificationListener::class.java)
-
-            mediaSessionManager.addOnActiveSessionsChangedListener(
-                { controllers ->
-                    appendLog("New media session")
-                    registerMediaController()
-                }, componentName
-            )
-        }
-
-        if (connectedDevice != null) {
-            sendState("CENTRAL_CONNECTED")
-            appendLog("Central is connected")
-            registerMediaController()
-        } else {
-            sendState("CENTRAL_DISCONNECTED")
-            appendLog("Central is not connected")
         }
     }
 
@@ -294,11 +287,54 @@ class Synchronizer : Service() {
         }
     }
 
-    private fun stopAdvertising() {
-        if (isAdvertising) {
-            appendLog("Stop advertising")
-            isAdvertising = false
-            advertiser.stopAdvertising(advertiseCallback)
+    private fun startAsForegroundService() {
+        appendLog("Start service")
+
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        var notificationChannel =
+            notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
+
+        if (notificationChannel == null) {
+            notificationChannel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_LOW
+            )
+            notificationChannel.description =
+                "Channel for Twingo's Synchronizer foreground service notification"
+            notificationManager.createNotificationChannel(notificationChannel)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, 0, Intent("NotificationCanceled"),
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setOngoing(true)
+            .setSmallIcon(R.mipmap.ic_launcher_round)
+            .setContentTitle("Twingo")
+            .setContentText("Foreground service running")
+            .setDeleteIntent(pendingIntent)
+            .build()
+
+        startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+
+        if (gattServer == null) {
+            startGattServer()
+            startAdvertising()
+            handlerThread.start()
+            registerMediaControllerHandler = Handler(Looper.getMainLooper())
+            LocalBroadcastManager.getInstance(this).registerReceiver(
+                broadcastReceiver, IntentFilter("NotificationCanceled")
+            )
+        } else {
+            if (connectedDevice != null) {
+                sendState("CENTRAL_CONNECTED")
+                appendLog("Central is connected")
+                registerMediaControllerTask.run()
+            } else {
+                sendState("CENTRAL_DISCONNECTED")
+                appendLog("Central is not connected")
+            }
         }
     }
 
@@ -322,6 +358,14 @@ class Synchronizer : Service() {
                 false -> "fail"
             }
         )
+    }
+
+    private fun stopAdvertising() {
+        if (isAdvertising) {
+            appendLog("Stop advertising")
+            isAdvertising = false
+            advertiser.stopAdvertising(advertiseCallback)
+        }
     }
 
     private fun sendCurrentMusic(metadata: MediaMetadata?) {
