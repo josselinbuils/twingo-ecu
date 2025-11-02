@@ -31,7 +31,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.graphics.scale
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,32 +39,7 @@ private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 
 class MainActivity : AppCompatActivity() {
-    private val editTextCurrentMusicCharacteristic: EditText
-        get() = findViewById(R.id.edit_current_music)
-    private val grayscaleMusicCover: ImageView
-        get() = findViewById(R.id.image_grayscale_music_cover)
-    private val musicCover: ImageView
-        get() = findViewById(R.id.image_music_cover)
-    private val scrollViewLog: ScrollView
-        get() = findViewById(R.id.scroll_logs)
-    private val textViewConnectionState: TextView
-        get() = findViewById(R.id.text_connection_state)
-    private val textViewLog: TextView
-        get() = findViewById(R.id.text_logs)
-    private var synchronizer: Synchronizer? = null
-    private val synchronizerConnection = object : ServiceConnection {
-
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            appendLog("Synchronizer service connected")
-            synchronizer = (service as Synchronizer.LocalBinder).getService()
-        }
-
-        override fun onServiceDisconnected(arg0: ComponentName) {
-            appendLog("Synchronizer service disconnected")
-        }
-    }
-
-    private val broadcastReceiver = object : BroadcastReceiver() {
+    inner class Receiver : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Synchronizer.Constants.INTENT_BITMAPS) {
                 val bitmap = intent.getParcelableExtra(
@@ -88,6 +62,8 @@ class MainActivity : AppCompatActivity() {
                 if (message != null) {
                     appendLog(message)
                 }
+            } else if (intent.action == Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED) {
+                finish()
             } else if (intent.action == Synchronizer.Constants.INTENT_STATE) {
                 val state = intent.getStringExtra(Synchronizer.Constants.INTENT_STATE_STATE)
 
@@ -101,7 +77,37 @@ class MainActivity : AppCompatActivity() {
                         textViewConnectionState.text = getString(R.string.text_disconnected)
                     }
                 }
+            } else {
+                appendLog("Unknown intent: ${intent.action}")
             }
+        }
+    }
+
+    private val editTextCurrentMusicCharacteristic: EditText
+        get() = findViewById(R.id.edit_current_music)
+    private val grayscaleMusicCover: ImageView
+        get() = findViewById(R.id.image_grayscale_music_cover)
+    private val musicCover: ImageView
+        get() = findViewById(R.id.image_music_cover)
+    private val broadcastReceiver = Receiver()
+    private val scrollViewLog: ScrollView
+        get() = findViewById(R.id.scroll_logs)
+    private var synchronizer: Synchronizer? = null
+    private val textViewConnectionState: TextView
+        get() = findViewById(R.id.text_connection_state)
+    private val textViewLog: TextView
+        get() = findViewById(R.id.text_logs)
+
+    private val synchronizerConnection = object : ServiceConnection {
+
+        override fun onServiceConnected(className: ComponentName, service: IBinder) {
+            appendLog("Synchronizer service connected")
+            synchronizer = (service as Synchronizer.LocalBinder).getService()
+        }
+
+        override fun onServiceDisconnected(arg0: ComponentName) {
+            appendLog("Synchronizer service disconnected")
+            synchronizer = null
         }
     }
 
@@ -133,9 +139,9 @@ class MainActivity : AppCompatActivity() {
             intentFilter.addAction(Synchronizer.Constants.INTENT_LOG)
             intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED)
             intentFilter.addAction(Synchronizer.Constants.INTENT_STATE)
+            intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED)
 
-            LocalBroadcastManager.getInstance(this)
-                .registerReceiver(broadcastReceiver, intentFilter)
+            this.registerReceiver(broadcastReceiver, intentFilter, RECEIVER_EXPORTED)
 
             ensureBluetoothCanBeUsed { isSuccess, message ->
                 runOnUiThread {
@@ -147,6 +153,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopSynchronizer()
+        unregisterReceiver(broadcastReceiver)
     }
 
     override fun onResume() {
@@ -197,6 +209,13 @@ class MainActivity : AppCompatActivity() {
 
         startForegroundService(intent)
         bindSynchronizerIfRunning()
+    }
+
+    private fun stopSynchronizer() {
+        val intent = Intent(this, Synchronizer::class.java)
+
+        stopService(intent)
+        synchronizer = null
     }
 
     private fun bindSynchronizerIfRunning() {

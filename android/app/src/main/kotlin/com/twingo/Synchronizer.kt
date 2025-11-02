@@ -1,5 +1,6 @@
 package com.twingo
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -14,11 +15,8 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
-import android.content.BroadcastReceiver
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 import android.graphics.Bitmap
 import android.media.MediaMetadata
@@ -33,7 +31,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import androidx.core.graphics.set
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import java.text.Normalizer
 import java.util.UUID
 import kotlin.math.ceil
@@ -64,17 +61,6 @@ class Synchronizer : Service() {
     inner class LocalBinder : Binder() {
         fun getService(): Synchronizer = this@Synchronizer
     }
-
-    val currentMusicCharacteristic = BluetoothGattCharacteristic(
-        UUID.fromString(UUID_CHARACTERISTIC_CURRENT_MUSIC),
-        BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-        BluetoothGattCharacteristic.PERMISSION_READ
-    )
-    val musicCoverCharacteristic = BluetoothGattCharacteristic(
-        UUID.fromString(UUID_CHARACTERISTIC_MUSIC_COVER),
-        BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-        BluetoothGattCharacteristic.PERMISSION_READ
-    )
 
     private val binder = LocalBinder()
     private val bluetoothManager: BluetoothManager by lazy {
@@ -118,12 +104,6 @@ class Synchronizer : Service() {
             }
             appendLog("Advertise start failed: errorCode=$errorCode $desc")
             isAdvertising = false
-        }
-    }
-
-    private val broadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            appendLog(intent.action.toString())
         }
     }
 
@@ -203,7 +183,7 @@ class Synchronizer : Service() {
     private fun appendLog(message: String) {
         val intent = Intent(INTENT_LOG)
         intent.putExtra(INTENT_LOG_MESSAGE, message)
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        this.sendBroadcast(intent)
     }
 
     fun registerMediaController() {
@@ -234,7 +214,7 @@ class Synchronizer : Service() {
         val intent = Intent(INTENT_BITMAPS)
         intent.putExtra(INTENT_BITMAPS_BITMAP, bitmap)
         intent.putExtra(INTENT_BITMAPS_GRAYSCALE_BITMAP, grayscaleBitmap)
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        this.sendBroadcast(intent)
     }
 
     fun sendNotification(uuid: String, data: ByteArray, split: Boolean = false) {
@@ -281,7 +261,7 @@ class Synchronizer : Service() {
     private fun sendState(state: String) {
         val intent = Intent(INTENT_STATE)
         intent.putExtra(INTENT_STATE_STATE, state)
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        this.sendBroadcast(intent)
     }
 
     private fun startAdvertising() {
@@ -294,6 +274,7 @@ class Synchronizer : Service() {
         }
     }
 
+    @SuppressLint("LaunchActivityFromNotification")
     private fun startAsForegroundService() {
         appendLog("Start service")
 
@@ -303,23 +284,26 @@ class Synchronizer : Service() {
 
         if (notificationChannel == null) {
             notificationChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_LOW
+                NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_HIGH
             )
             notificationChannel.description =
                 "Channel for Twingo's Synchronizer foreground service notification"
             notificationManager.createNotificationChannel(notificationChannel)
         }
 
-        val pendingIntent = PendingIntent.getBroadcast(
-            this, 0, Intent(INTENT_NOTIFICATION_CANCELED),
-            PendingIntent.FLAG_IMMUTABLE
-        )
+        val intent = Intent(this, BroadcastForwarder::class.java)
+
+        intent.action = INTENT_NOTIFICATION_CANCELED
+
+        val pendingIntent =
+            PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentTitle("Twingo")
             .setContentText("Foreground service running")
+            .setContentIntent(pendingIntent)
             .setDeleteIntent(pendingIntent)
             .build()
 
@@ -329,16 +313,13 @@ class Synchronizer : Service() {
             startGattServer()
             startAdvertising()
             registerMediaControllerHandler = Handler(Looper.getMainLooper())
-            LocalBroadcastManager.getInstance(this).registerReceiver(
-                broadcastReceiver, IntentFilter("NotificationCanceled")
-            )
         } else {
             if (connectedDevice != null) {
-                sendState("CENTRAL_CONNECTED")
+                sendState(STATE_CENTRAL_CONNECTED)
                 appendLog("Central is connected")
                 registerMediaControllerTask.run()
             } else {
-                sendState("CENTRAL_DISCONNECTED")
+                sendState(STATE_CENTRAL_DISCONNECTED)
                 appendLog("Central is not connected")
             }
         }
@@ -351,7 +332,19 @@ class Synchronizer : Service() {
         val service = BluetoothGattService(
             UUID.fromString(UUID_SERVICE), BluetoothGattService.SERVICE_TYPE_PRIMARY
         )
+
+        val currentMusicCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(UUID_CHARACTERISTIC_CURRENT_MUSIC),
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
         service.addCharacteristic(currentMusicCharacteristic)
+
+        val musicCoverCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(UUID_CHARACTERISTIC_MUSIC_COVER),
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
         service.addCharacteristic(musicCoverCharacteristic)
 
         val result = gattServer.addService(service)
@@ -385,6 +378,7 @@ class Synchronizer : Service() {
             val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
             val music = Normalizer.normalize("$title\n$artist", Normalizer.Form.NFD)
                 .replace("\\p{Mn}+".toRegex(), "") // Removes accents
+                .replace("’", "'")
 
             val coverSize = 64
 
