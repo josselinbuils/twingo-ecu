@@ -29,6 +29,9 @@ const int SCALE_SIZE = 980;
 const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
 const int TICK_WIDTH = 2;
 
+char music_artist[100];
+char music_title[100];
+
 lv_obj_t *cover_img;
 lv_obj_t *indic;
 lv_obj_t *music_artist_label;
@@ -85,47 +88,20 @@ static esp_err_t __attribute__((unused)) i2c_master_read_slave(
 }
 
 void set_current_music(char *current_music) {
-  if (lvgl_port_lock(-1)) {
-
-    char *music_title = strtok(current_music, "\n");
-    char *music_artist = strtok(NULL, "\n");
-
-    ESP_LOGI(TAG, "Set current music: %s - %s", music_artist, music_title);
-
-    lv_point_t label_size;
-
-    lv_text_get_size(
-      &label_size,
-      strlen(music_title) >= strlen(music_artist) ? music_title : music_artist,
-      &lv_font_montserrat_28,
-      0,
-      0,
-      500,
-      LV_TEXT_FLAG_NONE
-    );
-
-    int left = 40 + (strlen(music_artist) > strlen(music_title) ? label_size.x * 0.1 : 0);
-
-    lv_obj_set_width(music_title_label, label_size.x);
-    lv_obj_set_width(music_artist_label, label_size.x);
-    lv_obj_align(music_title_label, LV_ALIGN_BOTTOM_MID, left, -55);
-    lv_obj_align(music_artist_label, LV_ALIGN_BOTTOM_MID, left, -21);
-    lv_label_set_text(music_title_label, music_title);
-    lv_label_set_text(music_artist_label, music_artist);
-    lvgl_port_unlock();
-  }
+  strcpy(music_title, strtok(current_music, "\n"));
+  strcpy(music_artist, strtok(NULL, "\n"));
 }
 
 void set_music_cover(uint8_t *music_cover_map_src) {
-  ESP_LOGI(TAG, "Set music cover");
-
   if (lvgl_port_lock(-1)) {
+    ESP_LOGI(TAG, "Set current music: %s - %s", music_artist, music_title);
+
     const lv_draw_buf_t music_cover = {
       .header =
         {
           .magic = LV_IMAGE_HEADER_MAGIC,
           .cf = LV_COLOR_FORMAT_A8,
-          .flags = 0,
+          .flags = LV_IMAGE_FLAGS_MODIFIABLE,
           .w = 64,
           .h = 64,
           .stride = 64,
@@ -135,6 +111,29 @@ void set_music_cover(uint8_t *music_cover_map_src) {
       .data = music_cover_map_src
     };
 
+    lv_point_t label_size;
+
+    int use_title_width = strlen(music_title) >= strlen(music_artist);
+
+    lv_text_get_size(
+      &label_size,
+      use_title_width ? music_title : music_artist,
+      &lv_font_montserrat_28,
+      0,
+      0,
+      500,
+      LV_TEXT_FLAG_NONE
+    );
+
+    int width = label_size.x * 1.05; // 5% margin to prevent unwanted crop
+    int left = 40 + (use_title_width ? 0 : width * 0.1);
+
+    lv_obj_set_width(music_title_label, width);
+    lv_obj_set_width(music_artist_label, width);
+    lv_obj_align(music_title_label, LV_ALIGN_BOTTOM_MID, left, -55);
+    lv_obj_align(music_artist_label, LV_ALIGN_BOTTOM_MID, left, -21);
+    lv_label_set_text(music_title_label, music_title);
+    lv_label_set_text(music_artist_label, music_artist);
     lv_img_set_src(cover_img, &music_cover);
     lv_obj_align_to(cover_img, music_title_label, LV_ALIGN_OUT_LEFT_MID, -15, 15);
     lvgl_port_unlock();
