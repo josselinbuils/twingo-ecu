@@ -38,6 +38,7 @@ import kotlin.math.min
 
 private const val DEBUG = false
 private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
+private const val REGISTER_CONTROLLER_INIT_INTERVAL_MS = 5000
 private const val REGISTER_CONTROLLER_INTERVAL_MS = 10000
 
 class Synchronizer : Service() {
@@ -115,6 +116,10 @@ class Synchronizer : Service() {
                 unregisterMediaController()
                 connectedDevice = device
                 stopAdvertising()
+                registerMediaControllerHandler?.postDelayed(
+                    { registerMediaControllerTask.run() },
+                    REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
+                )
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 sendState(STATE_CENTRAL_CONNECTED)
                 appendLog("Central did disconnect")
@@ -309,20 +314,9 @@ class Synchronizer : Service() {
 
         startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
 
-        if (gattServer == null) {
-            startGattServer()
-            startAdvertising()
-            registerMediaControllerHandler = Handler(Looper.getMainLooper())
-        } else {
-            if (connectedDevice != null) {
-                sendState(STATE_CENTRAL_CONNECTED)
-                appendLog("Central is connected")
-                registerMediaControllerTask.run()
-            } else {
-                sendState(STATE_CENTRAL_DISCONNECTED)
-                appendLog("Central is not connected")
-            }
-        }
+        startGattServer()
+        startAdvertising()
+        registerMediaControllerHandler = Handler(Looper.getMainLooper())
     }
 
     private fun startGattServer() {
