@@ -90,7 +90,7 @@ class Synchronizer : Service() {
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            appendLog("Advertise start success")
+            appendLog("Advertising started")
         }
 
         override fun onStartFailure(errorCode: Int) {
@@ -186,7 +186,7 @@ class Synchronizer : Service() {
         this.sendBroadcast(intent)
     }
 
-    fun registerMediaController() {
+    private fun registerMediaController() {
         appendLog("Register media controller")
 
         val componentName = ComponentName(instance, NotificationListener::class.java)
@@ -276,7 +276,7 @@ class Synchronizer : Service() {
 
     @SuppressLint("LaunchActivityFromNotification")
     private fun startAsForegroundService() {
-        appendLog("Start service")
+        appendLog("Start Synchronizer service")
 
         val notificationManager = getSystemService(NotificationManager::class.java)
         var notificationChannel =
@@ -352,9 +352,9 @@ class Synchronizer : Service() {
         this.gattServer = gattServer
 
         appendLog(
-            "addService " + when (result) {
-                true -> "OK"
-                false -> "fail"
+            "GATT service " + when (result) {
+                true -> "added"
+                false -> "not added"
             }
         )
     }

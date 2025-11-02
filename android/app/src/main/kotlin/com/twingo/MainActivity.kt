@@ -39,6 +39,24 @@ private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 
 class MainActivity : AppCompatActivity() {
+    private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
+    private val broadcastReceiver = Receiver()
+    private val editTextCurrentMusicCharacteristic: EditText
+        get() = findViewById(R.id.edit_current_music)
+    private val grayscaleMusicCover: ImageView
+        get() = findViewById(R.id.image_grayscale_music_cover)
+    private val musicCover: ImageView
+        get() = findViewById(R.id.image_music_cover)
+    private var permissionResultHandlers =
+        mutableMapOf<Int, (Array<out String>, IntArray) -> Unit>()
+    private val scrollViewLog: ScrollView
+        get() = findViewById(R.id.scroll_logs)
+    private var synchronizer: Synchronizer? = null
+    private val textViewConnectionState: TextView
+        get() = findViewById(R.id.text_connection_state)
+    private val textViewLog: TextView
+        get() = findViewById(R.id.text_logs)
+
     inner class Receiver : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Synchronizer.Constants.INTENT_BITMAPS) {
@@ -83,21 +101,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val editTextCurrentMusicCharacteristic: EditText
-        get() = findViewById(R.id.edit_current_music)
-    private val grayscaleMusicCover: ImageView
-        get() = findViewById(R.id.image_grayscale_music_cover)
-    private val musicCover: ImageView
-        get() = findViewById(R.id.image_music_cover)
-    private val broadcastReceiver = Receiver()
-    private val scrollViewLog: ScrollView
-        get() = findViewById(R.id.scroll_logs)
-    private var synchronizer: Synchronizer? = null
-    private val textViewConnectionState: TextView
-        get() = findViewById(R.id.text_connection_state)
-    private val textViewLog: TextView
-        get() = findViewById(R.id.text_logs)
-
     private val synchronizerConnection = object : ServiceConnection {
 
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -111,11 +114,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        activityResultHandlers[requestCode]?.let { handler ->
+            handler(resultCode)
+        } ?: run {
+            appendLog("Error: onActivityResult requestCode=$requestCode result=$resultCode not handled")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         appendLog("Activity created")
-        grantAppPermissions(AskType.AskOnce) { isGranted ->
+        grantAppPermissions() { isGranted ->
             if (!isGranted) {
                 appendLog("⚠️Permission issue")
                 return@grantAppPermissions
@@ -161,12 +173,6 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(broadcastReceiver)
     }
 
-    override fun onResume() {
-        super.onResume()
-        appendLog("Activity resumed")
-        synchronizer?.registerMediaController()
-    }
-
     @Suppress("unused")
     fun onTapSend(view: View) {
         val synchronizer = synchronizer
@@ -175,6 +181,17 @@ class MainActivity : AppCompatActivity() {
             val text = editTextCurrentMusicCharacteristic.text.toString()
             val data = text.toByteArray(Charsets.UTF_8)
             synchronizer.sendNotification(Synchronizer.UUID_CHARACTERISTIC_CURRENT_MUSIC, data)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        permissionResultHandlers[requestCode]?.let { handler ->
+            handler(permissions, grantResults)
+        } ?: run {
+            appendLog("Error: onRequestPermissionsResult requestCode=$requestCode not handled")
         }
     }
 
@@ -198,71 +215,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasNotificationAccess(): Boolean {
-        return Settings.Secure.getString(
-            contentResolver, "enabled_notification_listeners"
-        ).contains(packageName)
-    }
-
-    private fun startSynchronizer() {
-        val intent = Intent(this, Synchronizer::class.java)
-
-        startForegroundService(intent)
-        bindSynchronizerIfRunning()
-    }
-
-    private fun stopSynchronizer() {
-        val intent = Intent(this, Synchronizer::class.java)
-
-        stopService(intent)
-        synchronizer = null
-    }
-
     private fun bindSynchronizerIfRunning() {
         Intent(this, Synchronizer::class.java).also { intent ->
             bindService(intent, synchronizerConnection, 0)
         }
     }
 
-    enum class AskType {
-        AskOnce, InsistUntilSuccess
+    private fun hasNotificationAccess(): Boolean {
+        return Settings.Secure.getString(
+            contentResolver, "enabled_notification_listeners"
+        ).contains(packageName)
     }
 
-    private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
-    private var permissionResultHandlers =
-        mutableMapOf<Int, (Array<out String>, IntArray) -> Unit>()
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        activityResultHandlers[requestCode]?.let { handler ->
-            handler(resultCode)
-        } ?: run {
-            appendLog("Error: onActivityResult requestCode=$requestCode result=$resultCode not handled")
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        permissionResultHandlers[requestCode]?.let { handler ->
-            handler(permissions, grantResults)
-        } ?: run {
-            appendLog("Error: onRequestPermissionsResult requestCode=$requestCode not handled")
-        }
-    }
-
-    private fun ensureBluetoothCanBeUsed(completion: (Boolean, String) -> Unit) {
-        enableBluetooth(AskType.AskOnce) { isEnabled ->
-            if (!isEnabled) {
-                completion(false, "Bluetooth OFF")
-                return@enableBluetooth
-            }
-            completion(true, "BLE ready for use")
-        }
-    }
-
-    private fun enableBluetooth(askType: AskType, completion: (Boolean) -> Unit) {
+    private fun enableBluetooth(completion: (Boolean) -> Unit) {
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
 
         if (bluetoothManager.adapter.isEnabled) {
@@ -274,7 +239,8 @@ class MainActivity : AppCompatActivity() {
             // set activity result handler
             activityResultHandlers[requestCode] = { result ->
                 val isSuccess = result == RESULT_OK
-                if (isSuccess || askType != AskType.InsistUntilSuccess) {
+
+                if (isSuccess) {
                     activityResultHandlers.remove(requestCode)
                     completion(isSuccess)
                 } else {
@@ -290,15 +256,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun grantAppPermissions(
-        askType: AskType, completion: (Boolean) -> Unit
-    ) {
+    private fun ensureBluetoothCanBeUsed(completion: (Boolean, String) -> Unit) {
+        enableBluetooth() { isEnabled ->
+            if (!isEnabled) {
+                completion(false, "Bluetooth OFF")
+                return@enableBluetooth
+            }
+            completion(true, "BLE ready for use")
+        }
+    }
+
+    private fun grantAppPermissions(completion: (Boolean) -> Unit) {
         val wantedPermissions = arrayOf(
             BLUETOOTH_CONNECT, BLUETOOTH_ADVERTISE, FOREGROUND_SERVICE_CONNECTED_DEVICE,
             POST_NOTIFICATIONS
         )
 
-        if (hasPermissions(wantedPermissions)) {
+        if (wantedPermissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
             completion(true)
         } else {
             runOnUiThread {
@@ -306,23 +280,30 @@ class MainActivity : AppCompatActivity() {
 
                 permissionResultHandlers[requestCode] = { permissions, grantResults ->
                     val isSuccess = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
-                    if (isSuccess || askType != AskType.InsistUntilSuccess) {
+
+                    if (isSuccess) {
                         permissionResultHandlers.remove(requestCode)
                         completion(isSuccess)
                     } else {
-                        requestPermissionArray(wantedPermissions, requestCode)
+                        requestPermissions(wantedPermissions, requestCode)
                     }
                 }
-                requestPermissionArray(wantedPermissions, requestCode)
+                requestPermissions(wantedPermissions, requestCode)
             }
         }
     }
 
-    private fun Context.hasPermissions(permissions: Array<String>): Boolean = permissions.all {
-        ActivityCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    private fun startSynchronizer() {
+        val intent = Intent(this, Synchronizer::class.java)
+
+        startForegroundService(intent)
+        bindSynchronizerIfRunning()
     }
 
-    private fun Activity.requestPermissionArray(permissions: Array<String>, requestCode: Int) {
-        ActivityCompat.requestPermissions(this, permissions, requestCode)
+    private fun stopSynchronizer() {
+        val intent = Intent(this, Synchronizer::class.java)
+
+        stopService(intent)
+        synchronizer = null
     }
 }
