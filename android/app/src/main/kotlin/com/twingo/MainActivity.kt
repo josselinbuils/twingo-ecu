@@ -5,7 +5,6 @@ import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
 import android.Manifest.permission.POST_NOTIFICATIONS
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
@@ -29,7 +28,6 @@ import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.graphics.scale
 import java.text.SimpleDateFormat
 import java.util.Date
