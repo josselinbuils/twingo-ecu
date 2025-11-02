@@ -125,8 +125,8 @@ void set_music_cover(uint8_t *music_cover_map_src) {
       LV_TEXT_FLAG_NONE
     );
 
-    int width = label_size.x * 1.05; // 5% margin to prevent unwanted crop
-    int left = 40 + (use_title_width ? 0 : width * 0.1);
+    int width = label_size.x + 30; // Margin to prevent unwanted crop
+    int left = 55 + (use_title_width ? 0 : width * 0.1);
 
     lv_obj_set_width(music_title_label, width);
     lv_obj_set_width(music_artist_label, width);
