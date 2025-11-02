@@ -90,54 +90,55 @@ static esp_err_t __attribute__((unused)) i2c_master_read_slave(
 void set_current_music(char *current_music) {
   strcpy(music_title, strtok(current_music, "\n"));
   strcpy(music_artist, strtok(NULL, "\n"));
+
+  // We are going tow write in image buffer so we lock LVGL
+  lvgl_port_lock(-1);
 }
 
 void set_music_cover(uint8_t *music_cover_map_src) {
-  if (lvgl_port_lock(-1)) {
-    ESP_LOGI(TAG, "Set current music: %s - %s", music_artist, music_title);
+  ESP_LOGI(TAG, "Set current music: %s - %s", music_artist, music_title);
 
-    const lv_draw_buf_t music_cover = {
-      .header =
-        {
-          .magic = LV_IMAGE_HEADER_MAGIC,
-          .cf = LV_COLOR_FORMAT_A8,
-          .flags = LV_IMAGE_FLAGS_MODIFIABLE,
-          .w = 64,
-          .h = 64,
-          .stride = 64,
-          .reserved_2 = 0,
-        },
-      .data_size = 4096,
-      .data = music_cover_map_src
-    };
+  const lv_draw_buf_t music_cover = {
+    .header =
+      {
+        .magic = LV_IMAGE_HEADER_MAGIC,
+        .cf = LV_COLOR_FORMAT_A8,
+        .flags = LV_IMAGE_FLAGS_MODIFIABLE,
+        .w = 64,
+        .h = 64,
+        .stride = 64,
+        .reserved_2 = 0,
+      },
+    .data_size = 4096,
+    .data = music_cover_map_src
+  };
 
-    lv_point_t label_size;
+  lv_point_t label_size;
 
-    int use_title_width = strlen(music_title) >= strlen(music_artist);
+  int use_title_width = strlen(music_title) >= strlen(music_artist);
 
-    lv_text_get_size(
-      &label_size,
-      use_title_width ? music_title : music_artist,
-      &lv_font_montserrat_28,
-      0,
-      0,
-      500,
-      LV_TEXT_FLAG_NONE
-    );
+  lv_text_get_size(
+    &label_size,
+    use_title_width ? music_title : music_artist,
+    &lv_font_montserrat_28,
+    0,
+    0,
+    500,
+    LV_TEXT_FLAG_NONE
+  );
 
-    int width = label_size.x + 30; // Margin to prevent unwanted crop
-    int left = 55 + (use_title_width ? 0 : width * 0.1);
+  int width = label_size.x + 30; // Margin to prevent unwanted crop
+  int left = 55 + (use_title_width ? 0 : width * 0.1);
 
-    lv_obj_set_width(music_title_label, width);
-    lv_obj_set_width(music_artist_label, width);
-    lv_obj_align(music_title_label, LV_ALIGN_BOTTOM_MID, left, -55);
-    lv_obj_align(music_artist_label, LV_ALIGN_BOTTOM_MID, left, -21);
-    lv_label_set_text(music_title_label, music_title);
-    lv_label_set_text(music_artist_label, music_artist);
-    lv_img_set_src(cover_img, &music_cover);
-    lv_obj_align_to(cover_img, music_title_label, LV_ALIGN_OUT_LEFT_MID, -15, 15);
-    lvgl_port_unlock();
-  }
+  lv_obj_set_width(music_title_label, width);
+  lv_obj_set_width(music_artist_label, width);
+  lv_obj_align(music_title_label, LV_ALIGN_BOTTOM_MID, left, -55);
+  lv_obj_align(music_artist_label, LV_ALIGN_BOTTOM_MID, left, -21);
+  lv_label_set_text(music_title_label, music_title);
+  lv_label_set_text(music_artist_label, music_artist);
+  lv_img_set_src(cover_img, &music_cover);
+  lv_obj_align_to(cover_img, music_title_label, LV_ALIGN_OUT_LEFT_MID, -15, 15);
+  lvgl_port_unlock();
 }
 
 void app_main() {
