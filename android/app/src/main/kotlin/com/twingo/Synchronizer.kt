@@ -117,7 +117,7 @@ class Synchronizer : Service() {
                 connectedDevice = device
                 stopAdvertising()
                 registerMediaControllerHandler?.postDelayed(
-                    { registerMediaControllerTask.run() },
+                    registerMediaControllerTask,
                     REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
                 )
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -132,7 +132,6 @@ class Synchronizer : Service() {
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
             appendLog("MTU changed: $mtu")
             instance.mtu = mtu
-            registerMediaControllerTask.run() // Device is ready to receive messages
         }
     }
 
@@ -162,7 +161,7 @@ class Synchronizer : Service() {
             appendLog("registerMediaControllerHandler not initialised")
         }
         registerMediaControllerHandler?.postDelayed(
-            { registerMediaControllerTask.run() }, REGISTER_CONTROLLER_INTERVAL_MS.toLong()
+            registerMediaControllerTask, REGISTER_CONTROLLER_INTERVAL_MS.toLong()
         )
     }
 
@@ -227,6 +226,7 @@ class Synchronizer : Service() {
         val server = gattServer
 
         if (device == null || server == null) {
+            appendLog("Cannot send notification: device or server is null")
             return
         }
 
@@ -362,7 +362,10 @@ class Synchronizer : Service() {
     }
 
     private fun sendCurrentMusic(metadata: MediaMetadata?) {
+        appendLog("Send current music")
+
         if (connectedDevice == null) {
+            appendLog("No connected device")
             return
         }
         var bitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
