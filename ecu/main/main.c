@@ -96,7 +96,7 @@ void set_current_music(char *current_music) {
 
     lv_text_get_size(
       &label_size,
-      strlen(music_title) > strlen(music_artist) ? music_title : music_artist,
+      strlen(music_title) >= strlen(music_artist) ? music_title : music_artist,
       &lv_font_montserrat_28,
       0,
       0,
