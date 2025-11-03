@@ -293,7 +293,7 @@ class Synchronizer : Service() {
 
         if (notificationChannel == null) {
             notificationChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_HIGH
+                NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_LOW
             )
             notificationChannel.description =
                 "Channel for Twingo's Synchronizer foreground service notification"
