@@ -225,8 +225,12 @@ class Synchronizer : Service() {
         val device = connectedDevice
         val server = gattServer
 
-        if (device == null || server == null) {
-            appendLog("Cannot send notification: device or server is null")
+        if ( server == null) {
+            appendLog("Cannot send notification: server is null")
+            return
+        }
+        if (device == null) {
+            appendLog("Cannot send notification: device is null")
             return
         }
 
