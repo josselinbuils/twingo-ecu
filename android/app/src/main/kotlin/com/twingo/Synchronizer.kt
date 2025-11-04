@@ -112,7 +112,7 @@ class Synchronizer : Service() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 sendState(STATE_CENTRAL_CONNECTED)
-                appendLog("Central did connect")
+                appendLog("Central has connected")
                 unregisterMediaController()
                 connectedDevice = device
                 stopAdvertising()
@@ -121,8 +121,8 @@ class Synchronizer : Service() {
                     REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
                 )
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                sendState(STATE_CENTRAL_CONNECTED)
-                appendLog("Central did disconnect")
+                sendState(STATE_CENTRAL_DISCONNECTED)
+                appendLog("Central has disconnected")
                 unregisterMediaController()
                 connectedDevice = null
                 startAdvertising()
@@ -169,6 +169,46 @@ class Synchronizer : Service() {
         return binder
     }
 
+    @SuppressLint("LaunchActivityFromNotification")
+    override fun onCreate() {
+        appendLog("Start Synchronizer service")
+
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        var notificationChannel =
+            notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
+
+        if (notificationChannel == null) {
+            notificationChannel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_LOW
+            )
+            notificationChannel.description =
+                "Channel for Twingo's Synchronizer foreground service notification"
+            notificationManager.createNotificationChannel(notificationChannel)
+        }
+
+        val intent = Intent(this, BroadcastForwarder::class.java)
+
+        intent.action = INTENT_NOTIFICATION_CANCELED
+
+        val pendingIntent =
+            PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
+        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setOngoing(true)
+            .setSmallIcon(R.mipmap.ic_launcher_round)
+            .setContentTitle("Twingo")
+            .setContentText("Foreground service running")
+            .setContentIntent(pendingIntent)
+            .setDeleteIntent(pendingIntent)
+            .build()
+
+        startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+
+        startGattServer()
+        startAdvertising()
+        registerMediaControllerHandler = Handler(Looper.getMainLooper())
+    }
+
     override fun onDestroy() {
         stopAdvertising()
         unregisterMediaController()
@@ -177,11 +217,6 @@ class Synchronizer : Service() {
         gattServer = null
         appendLog("GATT server closed")
         sendState(STATE_GATT_SERVER_CLOSED)
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startAsForegroundService()
-        return START_STICKY
     }
 
     private fun appendLog(message: String) {
@@ -225,7 +260,7 @@ class Synchronizer : Service() {
         val device = connectedDevice
         val server = gattServer
 
-        if ( server == null) {
+        if (server == null) {
             appendLog("Cannot send notification: server is null")
             return
         }
@@ -281,46 +316,6 @@ class Synchronizer : Service() {
                 advertiseSettings, advertiseData, advertiseCallback
             )
         }
-    }
-
-    @SuppressLint("LaunchActivityFromNotification")
-    private fun startAsForegroundService() {
-        appendLog("Start Synchronizer service")
-
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        var notificationChannel =
-            notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_ID)
-
-        if (notificationChannel == null) {
-            notificationChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID, "SynchronizerChannel", NotificationManager.IMPORTANCE_LOW
-            )
-            notificationChannel.description =
-                "Channel for Twingo's Synchronizer foreground service notification"
-            notificationManager.createNotificationChannel(notificationChannel)
-        }
-
-        val intent = Intent(this, BroadcastForwarder::class.java)
-
-        intent.action = INTENT_NOTIFICATION_CANCELED
-
-        val pendingIntent =
-            PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-
-        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setOngoing(true)
-            .setSmallIcon(R.mipmap.ic_launcher_round)
-            .setContentTitle("Twingo")
-            .setContentText("Foreground service running")
-            .setContentIntent(pendingIntent)
-            .setDeleteIntent(pendingIntent)
-            .build()
-
-        startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-
-        startGattServer()
-        startAdvertising()
-        registerMediaControllerHandler = Handler(Looper.getMainLooper())
     }
 
     private fun startGattServer() {
