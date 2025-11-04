@@ -73,13 +73,23 @@ class MainActivity : AppCompatActivity() {
                     grayscaleMusicCover.setImageBitmap(grayscaleBitmap?.scale(128, 128))
                 }
             } else if (intent.action == Synchronizer.Constants.INTENT_LOG) {
+                val important =
+                    intent.getBooleanExtra(Synchronizer.Constants.INTENT_LOG_IMPORTANT, false)
                 val message = intent.getStringExtra(Synchronizer.Constants.INTENT_LOG_MESSAGE)
 
                 if (message != null) {
-                    appendLog(message)
+                    if (important) {
+                        appendLog("-")
+                        appendLog(message)
+                        appendLog("-")
+                    } else {
+                        appendLog(message)
+                    }
                 }
             } else if (intent.action == Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED) {
                 finish()
+            } else if (intent.action == Synchronizer.Constants.INTENT_NOTIFICATION_CLICKED) {
+                synchronizer?.restartGattServer()
             } else if (intent.action == Synchronizer.Constants.INTENT_STATE) {
                 val state = intent.getStringExtra(Synchronizer.Constants.INTENT_STATE_STATE)
 
@@ -88,7 +98,7 @@ class MainActivity : AppCompatActivity() {
                         textViewConnectionState.text = getString(R.string.text_connected)
                     } else if (
                         state == Synchronizer.Constants.STATE_CENTRAL_DISCONNECTED ||
-                        state == Synchronizer.Constants.STATE_GATT_SERVER_CLOSED
+                        state == Synchronizer.Constants.STATE_GATT_SERVER_STOPPED
                     ) {
                         textViewConnectionState.text = getString(R.string.text_disconnected)
                     }
@@ -148,8 +158,8 @@ class MainActivity : AppCompatActivity() {
             intentFilter.addAction(Synchronizer.Constants.INTENT_BITMAPS)
             intentFilter.addAction(Synchronizer.Constants.INTENT_LOG)
             intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED)
+            intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CLICKED)
             intentFilter.addAction(Synchronizer.Constants.INTENT_STATE)
-            intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED)
 
             this.registerReceiver(broadcastReceiver, intentFilter, RECEIVER_EXPORTED)
 
@@ -201,10 +211,16 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun appendLog(message: String) {
-        Log.d("appendLog", message)
+        var displayedMessage = message
+
+        if (displayedMessage == "-") {
+            displayedMessage = "----------------------------------------------------------"
+        }
+
+        Log.d("appendLog", displayedMessage)
         runOnUiThread {
             val strTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-            textViewLog.text = textViewLog.text.toString() + "[$strTime] $message\n"
+            textViewLog.text = textViewLog.text.toString() + "[$strTime] $displayedMessage\n"
 
             // scroll after delay, because textView has to be updated first
             Handler(Looper.getMainLooper()).postDelayed({

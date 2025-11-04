@@ -40,6 +40,7 @@ private const val DEBUG = false
 private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
 private const val REGISTER_CONTROLLER_INIT_INTERVAL_MS = 5000
 private const val REGISTER_CONTROLLER_INTERVAL_MS = 10000
+private const val RESTART_GATT_SERVER_DELAY_MS = 10000
 
 class Synchronizer : Service() {
     companion object Constants {
@@ -47,13 +48,15 @@ class Synchronizer : Service() {
         const val INTENT_BITMAPS_BITMAP = "SYNCHRONIZER_BITMAPS_BITMAP"
         const val INTENT_BITMAPS_GRAYSCALE_BITMAP = "SYNCHRONIZER_BITMAPS_GRAYSCALE_BITMAP"
         const val INTENT_LOG = "SYNCHRONIZER_LOG"
+        const val INTENT_LOG_IMPORTANT = "SYNCHRONIZER_LOG_IMPORTANT"
         const val INTENT_LOG_MESSAGE = "SYNCHRONIZER_LOG_MESSAGE"
         const val INTENT_NOTIFICATION_CANCELED = "SYNCHRONIZER_NOTIFICATION_CANCELED"
+        const val INTENT_NOTIFICATION_CLICKED = "SYNCHRONIZER_NOTIFICATION_CLICKED"
         const val INTENT_STATE = "SYNCHRONIZER_STATE"
         const val INTENT_STATE_STATE = "SYNCHRONIZER_STATE_STATE"
         const val STATE_CENTRAL_CONNECTED = "CENTRAL_CONNECTED"
         const val STATE_CENTRAL_DISCONNECTED = "CENTRAL_DISCONNECTED"
-        const val STATE_GATT_SERVER_CLOSED = "GATT_SERVER_CLOSED"
+        const val STATE_GATT_SERVER_STOPPED = "GATT_SERVER_CLOSED"
         const val UUID_CHARACTERISTIC_CURRENT_MUSIC = "39394651-8477-4ffa-bc10-dfef56583a29"
         const val UUID_CHARACTERISTIC_MUSIC_COVER = "39394653-8477-4ffa-bc10-dfef56583a29"
         const val UUID_SERVICE = "39394650-8477-4ffa-bc10-dfef56583a29"
@@ -111,21 +114,32 @@ class Synchronizer : Service() {
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                sendState(STATE_CENTRAL_CONNECTED)
-                appendLog("Central has connected")
-                unregisterMediaController()
                 connectedDevice = device
-                stopAdvertising()
+                appendLog("Central has connected ($status)", true)
+                appendLog("Device address: ${device.address}")
+
+                registerMediaControllerHandler?.removeCallbacks(restartGattServerTask)
+
+                if (isAdvertising) {
+                    stopAdvertising()
+                }
+                unregisterMediaController()
                 registerMediaControllerHandler?.postDelayed(
                     registerMediaControllerTask,
                     REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
                 )
+                sendState(STATE_CENTRAL_CONNECTED)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                sendState(STATE_CENTRAL_DISCONNECTED)
-                appendLog("Central has disconnected")
-                unregisterMediaController()
                 connectedDevice = null
+                appendLog("Central has disconnected ($status)", true)
+                appendLog("Device address: ${device.address}")
+                unregisterMediaController()
                 startAdvertising()
+                sendState(STATE_CENTRAL_DISCONNECTED)
+                registerMediaControllerHandler?.postDelayed(
+                    restartGattServerTask,
+                    RESTART_GATT_SERVER_DELAY_MS.toLong()
+                )
             }
         }
 
@@ -141,8 +155,8 @@ class Synchronizer : Service() {
             val bitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
 
             if (newCurrentTitle != currentTitle && bitmap != null) {
-                appendLog("Current music changed")
                 currentTitle = newCurrentTitle
+                appendLog("Current music changed", true)
                 sendCurrentMusic(metadata)
             } else if (DEBUG) {
                 appendLog("Current music did not change")
@@ -165,13 +179,17 @@ class Synchronizer : Service() {
         )
     }
 
+    val restartGattServerTask: Runnable = Runnable {
+        restartGattServer()
+    }
+
     override fun onBind(intent: Intent?): IBinder? {
         return binder
     }
 
     @SuppressLint("LaunchActivityFromNotification")
     override fun onCreate() {
-        appendLog("Start Synchronizer service")
+        appendLog("Start Synchronizer service", true)
 
         val notificationManager = getSystemService(NotificationManager::class.java)
         var notificationChannel =
@@ -186,74 +204,41 @@ class Synchronizer : Service() {
             notificationManager.createNotificationChannel(notificationChannel)
         }
 
-        val intent = Intent(this, BroadcastForwarder::class.java)
+        val cancelIntent = Intent(this, BroadcastForwarder::class.java)
+        val clickIntent = Intent(this, BroadcastForwarder::class.java)
 
-        intent.action = INTENT_NOTIFICATION_CANCELED
+        cancelIntent.action = INTENT_NOTIFICATION_CANCELED
+        clickIntent.action = INTENT_NOTIFICATION_CLICKED
 
-        val pendingIntent =
-            PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val cancelPendingIntent =
+            PendingIntent.getBroadcast(this, 0, cancelIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val clickPendingIntent =
+            PendingIntent.getBroadcast(this, 0, clickIntent, PendingIntent.FLAG_IMMUTABLE)
 
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentTitle("Twingo")
             .setContentText("Foreground service running")
-            .setContentIntent(pendingIntent)
-            .setDeleteIntent(pendingIntent)
+            .setContentIntent(clickPendingIntent)
+            .setDeleteIntent(cancelPendingIntent)
             .build()
 
         startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
 
         startGattServer()
-        startAdvertising()
+
+        if (connectedDevice == null) {
+            startAdvertising()
+        }
         registerMediaControllerHandler = Handler(Looper.getMainLooper())
     }
 
     override fun onDestroy() {
-        stopAdvertising()
         unregisterMediaController()
-        gattServer?.close()
-        connectedDevice = null
-        gattServer = null
-        appendLog("GATT server closed")
-        sendState(STATE_GATT_SERVER_CLOSED)
-    }
-
-    private fun appendLog(message: String) {
-        val intent = Intent(INTENT_LOG)
-        intent.putExtra(INTENT_LOG_MESSAGE, message)
-        this.sendBroadcast(intent)
-    }
-
-    private fun registerMediaController() {
-        appendLog("Register media controller")
-
-        val componentName = ComponentName(instance, NotificationListener::class.java)
-        val controller = mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
-
-        mediaController?.unregisterCallback(mediaControllerCallback)
-        mediaController = controller
-
-        if (controller != null) {
-            val metadata = controller.metadata
-            val newCurrentTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-
-            if (newCurrentTitle != currentTitle) {
-                appendLog("Current music changed")
-                currentTitle = newCurrentTitle
-                sendCurrentMusic(metadata)
-            }
-            controller.registerCallback(mediaControllerCallback)
-        } else {
-            appendLog("No media controller found")
-        }
-    }
-
-    private fun sendBitmaps(bitmap: Bitmap, grayscaleBitmap: Bitmap) {
-        val intent = Intent(INTENT_BITMAPS)
-        intent.putExtra(INTENT_BITMAPS_BITMAP, bitmap)
-        intent.putExtra(INTENT_BITMAPS_GRAYSCALE_BITMAP, grayscaleBitmap)
-        this.sendBroadcast(intent)
+        stopAdvertising()
+        stopGattServer()
     }
 
     fun sendNotification(uuid: String, data: ByteArray, split: Boolean = false) {
@@ -294,12 +279,63 @@ class Synchronizer : Service() {
                     )
                 }
             } else {
-                appendLog("Sending notification: \"${data.toString(Charsets.UTF_8)}\"")
+                appendLog(
+                    "Sending notification: \"${
+                        data.toString(Charsets.UTF_8).replace("\n", "\\n")
+                    }\""
+                )
                 server.notifyCharacteristicChanged(
                     device, characteristic, false, data
                 )
             }
         }
+    }
+
+    fun restartGattServer() {
+        appendLog("Restart GATT server", true)
+        unregisterMediaController()
+        stopAdvertising()
+        stopGattServer()
+        startGattServer()
+        startAdvertising()
+    }
+
+    private fun appendLog(message: String, important: Boolean = false) {
+        val intent = Intent(INTENT_LOG)
+        intent.putExtra(INTENT_LOG_IMPORTANT, important)
+        intent.putExtra(INTENT_LOG_MESSAGE, message)
+        this.sendBroadcast(intent)
+    }
+
+    private fun registerMediaController() {
+        appendLog("Register media controller")
+
+        val componentName = ComponentName(instance, NotificationListener::class.java)
+        val controller = mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
+
+        mediaController?.unregisterCallback(mediaControllerCallback)
+        mediaController = controller
+
+        if (controller != null) {
+            val metadata = controller.metadata
+            val newCurrentTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+
+            if (newCurrentTitle != currentTitle) {
+                currentTitle = newCurrentTitle
+                appendLog("Current music changed", true)
+                sendCurrentMusic(metadata)
+            }
+            controller.registerCallback(mediaControllerCallback)
+        } else {
+            appendLog("No media controller found")
+        }
+    }
+
+    private fun sendBitmaps(bitmap: Bitmap, grayscaleBitmap: Bitmap) {
+        val intent = Intent(INTENT_BITMAPS)
+        intent.putExtra(INTENT_BITMAPS_BITMAP, bitmap)
+        intent.putExtra(INTENT_BITMAPS_GRAYSCALE_BITMAP, grayscaleBitmap)
+        this.sendBroadcast(intent)
     }
 
     private fun sendState(state: String) {
@@ -309,7 +345,11 @@ class Synchronizer : Service() {
     }
 
     private fun startAdvertising() {
-        if (!isAdvertising) {
+        if (isAdvertising) {
+            appendLog("Cannot start advertising: already advertising")
+        } else if (connectedDevice != null) {
+            appendLog("Cannot start advertising: device connected")
+        } else {
             appendLog("Start advertising")
             isAdvertising = true
             bluetoothManager.adapter.bluetoothLeAdvertiser.startAdvertising(
@@ -319,9 +359,10 @@ class Synchronizer : Service() {
     }
 
     private fun startGattServer() {
-        appendLog("Start GATT Server")
+        appendLog("Start GATT server")
 
-        val gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
+        this.gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
+
         val service = BluetoothGattService(
             UUID.fromString(UUID_SERVICE), BluetoothGattService.SERVICE_TYPE_PRIMARY
         )
@@ -340,9 +381,7 @@ class Synchronizer : Service() {
         )
         service.addCharacteristic(musicCoverCharacteristic)
 
-        val result = gattServer.addService(service)
-
-        this.gattServer = gattServer
+        val result = gattServer?.addService(service) ?: false
 
         appendLog(
             "GATT service " + when (result) {
@@ -357,6 +396,19 @@ class Synchronizer : Service() {
             appendLog("Stop advertising")
             isAdvertising = false
             bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+        } else {
+            appendLog("Cannot stop advertising: not advertising")
+        }
+    }
+
+    private fun stopGattServer() {
+        if (gattServer != null) {
+            appendLog("Stop GATT server")
+            gattServer?.close()
+            gattServer = null
+            sendState(STATE_GATT_SERVER_STOPPED)
+        } else {
+            appendLog("Cannot stop GATT server: not running")
         }
     }
 

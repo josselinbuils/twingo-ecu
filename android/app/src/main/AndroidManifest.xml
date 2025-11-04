@@ -39,6 +39,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="SYNCHRONIZER_NOTIFICATION_CANCELED" />
+                <action android:name="SYNCHRONIZER_NOTIFICATION_CLICKED" />
             </intent-filter>
         </receiver>
 
