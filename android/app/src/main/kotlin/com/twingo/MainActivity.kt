@@ -33,8 +33,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private const val BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE = 2
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
+private const val PERMISSIONS_REQUEST_CODE = 2
 
 class MainActivity : AppCompatActivity() {
     private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
@@ -45,8 +45,7 @@ class MainActivity : AppCompatActivity() {
         get() = findViewById(R.id.image_grayscale_music_cover)
     private val musicCover: ImageView
         get() = findViewById(R.id.image_music_cover)
-    private var permissionResultHandlers =
-        mutableMapOf<Int, (Array<out String>, IntArray) -> Unit>()
+    private var permissionResultHandler: ((Array<out String>, IntArray) -> Unit)? = null
     private val scrollViewLog: ScrollView
         get() = findViewById(R.id.scroll_logs)
     private var synchronizer: Synchronizer? = null
@@ -57,14 +56,14 @@ class MainActivity : AppCompatActivity() {
 
     inner class Receiver : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == Synchronizer.Constants.INTENT_BITMAPS) {
+            if (intent.action == Synchronizer.INTENT_BITMAPS) {
                 val bitmap = intent.getParcelableExtra(
-                    Synchronizer.Constants.INTENT_BITMAPS_BITMAP,
+                    Synchronizer.INTENT_BITMAPS_BITMAP,
                     Bitmap::class.java
                 )
                 val grayscaleBitmap =
                     intent.getParcelableExtra(
-                        Synchronizer.Constants.INTENT_BITMAPS_GRAYSCALE_BITMAP,
+                        Synchronizer.INTENT_BITMAPS_GRAYSCALE_BITMAP,
                         Bitmap::class.java
                     )
 
@@ -72,10 +71,10 @@ class MainActivity : AppCompatActivity() {
                     musicCover.setImageBitmap(bitmap?.scale(128, 128))
                     grayscaleMusicCover.setImageBitmap(grayscaleBitmap?.scale(128, 128))
                 }
-            } else if (intent.action == Synchronizer.Constants.INTENT_LOG) {
+            } else if (intent.action == Synchronizer.INTENT_LOG) {
                 val important =
-                    intent.getBooleanExtra(Synchronizer.Constants.INTENT_LOG_IMPORTANT, false)
-                val message = intent.getStringExtra(Synchronizer.Constants.INTENT_LOG_MESSAGE)
+                    intent.getBooleanExtra(Synchronizer.INTENT_LOG_IMPORTANT, false)
+                val message = intent.getStringExtra(Synchronizer.INTENT_LOG_MESSAGE)
 
                 if (message != null) {
                     if (important) {
@@ -86,19 +85,19 @@ class MainActivity : AppCompatActivity() {
                         appendLog(message)
                     }
                 }
-            } else if (intent.action == Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED) {
+            } else if (intent.action == Synchronizer.INTENT_NOTIFICATION_CANCELED) {
                 finish()
-            } else if (intent.action == Synchronizer.Constants.INTENT_NOTIFICATION_CLICKED) {
+            } else if (intent.action == Synchronizer.INTENT_NOTIFICATION_CLICKED) {
                 synchronizer?.restartGattServer()
-            } else if (intent.action == Synchronizer.Constants.INTENT_STATE) {
-                val state = intent.getStringExtra(Synchronizer.Constants.INTENT_STATE_STATE)
+            } else if (intent.action == Synchronizer.INTENT_STATE) {
+                val state = intent.getStringExtra(Synchronizer.INTENT_STATE_STATE)
 
                 runOnUiThread {
-                    if (state == Synchronizer.Constants.STATE_CENTRAL_CONNECTED) {
+                    if (state == Synchronizer.STATE_CENTRAL_CONNECTED) {
                         textViewConnectionState.text = getString(R.string.text_connected)
                     } else if (
-                        state == Synchronizer.Constants.STATE_CENTRAL_DISCONNECTED ||
-                        state == Synchronizer.Constants.STATE_GATT_SERVER_STOPPED
+                        state == Synchronizer.STATE_CENTRAL_DISCONNECTED ||
+                        state == Synchronizer.STATE_GATT_SERVER_STOPPED
                     ) {
                         textViewConnectionState.text = getString(R.string.text_disconnected)
                     }
@@ -112,8 +111,11 @@ class MainActivity : AppCompatActivity() {
     private val synchronizerConnection = object : ServiceConnection {
 
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
+            if (service !is Synchronizer.LocalBinder) {
+                return
+            }
             appendLog("Synchronizer service connected")
-            synchronizer = (service as Synchronizer.LocalBinder).getService()
+            synchronizer = service.getService()
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
@@ -155,11 +157,11 @@ class MainActivity : AppCompatActivity() {
 
             val intentFilter = IntentFilter()
 
-            intentFilter.addAction(Synchronizer.Constants.INTENT_BITMAPS)
-            intentFilter.addAction(Synchronizer.Constants.INTENT_LOG)
-            intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CANCELED)
-            intentFilter.addAction(Synchronizer.Constants.INTENT_NOTIFICATION_CLICKED)
-            intentFilter.addAction(Synchronizer.Constants.INTENT_STATE)
+            intentFilter.addAction(Synchronizer.INTENT_BITMAPS)
+            intentFilter.addAction(Synchronizer.INTENT_LOG)
+            intentFilter.addAction(Synchronizer.INTENT_NOTIFICATION_CANCELED)
+            intentFilter.addAction(Synchronizer.INTENT_NOTIFICATION_CLICKED)
+            intentFilter.addAction(Synchronizer.INTENT_STATE)
 
             this.registerReceiver(broadcastReceiver, intentFilter, RECEIVER_EXPORTED)
 
@@ -196,7 +198,7 @@ class MainActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        permissionResultHandlers[requestCode]?.let { handler ->
+        permissionResultHandler?.let { handler ->
             handler(permissions, grantResults)
         } ?: run {
             appendLog("Error: onRequestPermissionsResult requestCode=$requestCode not handled")
@@ -281,42 +283,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun grantAppPermissions(completion: (Boolean) -> Unit) {
-        val wantedPermissions = arrayOf(
+        val permissions = arrayOf(
             BLUETOOTH_CONNECT, BLUETOOTH_ADVERTISE, FOREGROUND_SERVICE_CONNECTED_DEVICE,
             POST_NOTIFICATIONS
         )
 
-        if (wantedPermissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
+        if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
             completion(true)
         } else {
             runOnUiThread {
-                val requestCode = BLUETOOTH_ALL_PERMISSIONS_REQUEST_CODE
+                appendLog("Permissions not granted, requesting")
 
-                permissionResultHandlers[requestCode] = { permissions, grantResults ->
+                permissionResultHandler = { permissions, grantResults ->
                     val isSuccess = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
 
                     if (isSuccess) {
-                        permissionResultHandlers.remove(requestCode)
-                        completion(isSuccess)
+                        appendLog("Permissions granted")
+                        completion(true)
                     } else {
-                        requestPermissions(wantedPermissions, requestCode)
+                        appendLog("Permissions not granted, requesting")
+                        requestPermissions(permissions, PERMISSIONS_REQUEST_CODE)
                     }
                 }
-                requestPermissions(wantedPermissions, requestCode)
+                requestPermissions(permissions, PERMISSIONS_REQUEST_CODE)
             }
         }
     }
 
     private fun startSynchronizer() {
         val intent = Intent(this, Synchronizer::class.java)
-
         startForegroundService(intent)
         bindSynchronizerIfRunning()
     }
 
     private fun stopSynchronizer() {
         val intent = Intent(this, Synchronizer::class.java)
-
         stopService(intent)
         synchronizer = null
     }

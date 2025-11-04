@@ -43,17 +43,17 @@ private const val REGISTER_CONTROLLER_INTERVAL_MS = 10000
 private const val RESTART_GATT_SERVER_DELAY_MS = 20000
 
 class Synchronizer : Service() {
-    companion object Constants {
-        const val INTENT_BITMAPS = "SYNCHRONIZER_BITMAPS"
-        const val INTENT_BITMAPS_BITMAP = "SYNCHRONIZER_BITMAPS_BITMAP"
-        const val INTENT_BITMAPS_GRAYSCALE_BITMAP = "SYNCHRONIZER_BITMAPS_GRAYSCALE_BITMAP"
-        const val INTENT_LOG = "SYNCHRONIZER_LOG"
-        const val INTENT_LOG_IMPORTANT = "SYNCHRONIZER_LOG_IMPORTANT"
-        const val INTENT_LOG_MESSAGE = "SYNCHRONIZER_LOG_MESSAGE"
-        const val INTENT_NOTIFICATION_CANCELED = "SYNCHRONIZER_NOTIFICATION_CANCELED"
-        const val INTENT_NOTIFICATION_CLICKED = "SYNCHRONIZER_NOTIFICATION_CLICKED"
-        const val INTENT_STATE = "SYNCHRONIZER_STATE"
-        const val INTENT_STATE_STATE = "SYNCHRONIZER_STATE_STATE"
+    companion object {
+        const val INTENT_BITMAPS = "Twingo.Synchronizer.BITMAPS"
+        const val INTENT_BITMAPS_BITMAP = "Twingo.Synchronizer.BITMAPS_BITMAP"
+        const val INTENT_BITMAPS_GRAYSCALE_BITMAP = "Twingo.Synchronizer.BITMAPS_GRAYSCALE_BITMAP"
+        const val INTENT_LOG = "Twingo.Synchronizer.LOG"
+        const val INTENT_LOG_IMPORTANT = "Twingo.Synchronizer.LOG_IMPORTANT"
+        const val INTENT_LOG_MESSAGE = "Twingo.Synchronizer.LOG_MESSAGE"
+        const val INTENT_NOTIFICATION_CANCELED = "Twingo.Synchronizer.NOTIFICATION_CANCELED"
+        const val INTENT_NOTIFICATION_CLICKED = "Twingo.Synchronizer.NOTIFICATION_CLICKED"
+        const val INTENT_STATE = "Twingo.Synchronizer.STATE"
+        const val INTENT_STATE_STATE = "Twingo.Synchronizer.STATE_STATE"
         const val STATE_CENTRAL_CONNECTED = "CENTRAL_CONNECTED"
         const val STATE_CENTRAL_DISCONNECTED = "CENTRAL_DISCONNECTED"
         const val STATE_GATT_SERVER_STOPPED = "GATT_SERVER_CLOSED"
