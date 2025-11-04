@@ -23,7 +23,7 @@ const int PULSES_PER_REVOLUTION = 1;  // Set how many pulses there are on each r
 const unsigned long ZERO_TIMEOUT = 100000;  // For high response time, a good value would be 100000.
                                             // For reading very low rpm, a good value would be 300000.
 
-const int NUM_RPM_READINGS = 5;  // Number of samples for smoothing. The higher, the more smoothing, but it's going to
+const int NUM_RPM_READINGS = 10;  // Number of samples for smoothing. The higher, the more smoothing, but it's going to
                                  // react slower to changes. 1 = no smoothing. Default: 2.
 
 
