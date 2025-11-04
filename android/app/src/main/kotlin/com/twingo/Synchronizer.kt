@@ -40,7 +40,7 @@ private const val DEBUG = false
 private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
 private const val REGISTER_CONTROLLER_INIT_INTERVAL_MS = 5000
 private const val REGISTER_CONTROLLER_INTERVAL_MS = 10000
-private const val RESTART_GATT_SERVER_DELAY_MS = 10000
+private const val RESTART_GATT_SERVER_DELAY_MS = 20000
 
 class Synchronizer : Service() {
     companion object Constants {
@@ -74,13 +74,13 @@ class Synchronizer : Service() {
 
     private var currentTitle: String? = null
     private var gattServer: BluetoothGattServer? = null
+    private var handler: Handler? = null
     private val instance = this
     private var isAdvertising = false
     private var mediaController: MediaController? = null
     private val mediaSessionManager: MediaSessionManager by lazy {
         getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
     }
-    private var registerMediaControllerHandler: Handler? = null
     private var mtu = 512
 
     private val advertiseSettings =
@@ -118,15 +118,14 @@ class Synchronizer : Service() {
                 appendLog("Central has connected ($status)", true)
                 appendLog("Device address: ${device.address}")
 
-                registerMediaControllerHandler?.removeCallbacks(restartGattServerTask)
+                handler?.removeCallbacks(restartGattServerTask)
 
                 if (isAdvertising) {
                     stopAdvertising()
                 }
                 unregisterMediaController()
-                registerMediaControllerHandler?.postDelayed(
-                    registerMediaControllerTask,
-                    REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
+                handler?.postDelayed(
+                    registerMediaControllerTask, REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
                 )
                 sendState(STATE_CENTRAL_CONNECTED)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -136,10 +135,7 @@ class Synchronizer : Service() {
                 unregisterMediaController()
                 startAdvertising()
                 sendState(STATE_CENTRAL_DISCONNECTED)
-                registerMediaControllerHandler?.postDelayed(
-                    restartGattServerTask,
-                    RESTART_GATT_SERVER_DELAY_MS.toLong()
-                )
+                handler?.postDelayed(restartGattServerTask, RESTART_GATT_SERVER_DELAY_MS.toLong())
             }
         }
 
@@ -171,12 +167,10 @@ class Synchronizer : Service() {
     val registerMediaControllerTask: Runnable = Runnable {
         registerMediaController()
 
-        if (registerMediaControllerHandler == null) {
-            appendLog("registerMediaControllerHandler not initialised")
+        if (handler == null) {
+            appendLog("handler not initialised")
         }
-        registerMediaControllerHandler?.postDelayed(
-            registerMediaControllerTask, REGISTER_CONTROLLER_INTERVAL_MS.toLong()
-        )
+        handler?.postDelayed(registerMediaControllerTask, REGISTER_CONTROLLER_INTERVAL_MS.toLong())
     }
 
     val restartGattServerTask: Runnable = Runnable {
@@ -232,10 +226,11 @@ class Synchronizer : Service() {
         if (connectedDevice == null) {
             startAdvertising()
         }
-        registerMediaControllerHandler = Handler(Looper.getMainLooper())
+        handler = Handler(Looper.getMainLooper())
     }
 
     override fun onDestroy() {
+        handler?.removeCallbacks(restartGattServerTask)
         unregisterMediaController()
         stopAdvertising()
         stopGattServer()
@@ -293,6 +288,7 @@ class Synchronizer : Service() {
 
     fun restartGattServer() {
         appendLog("Restart GATT server", true)
+        handler?.removeCallbacks(restartGattServerTask)
         unregisterMediaController()
         stopAdvertising()
         stopGattServer()
@@ -477,7 +473,7 @@ class Synchronizer : Service() {
 
     private fun unregisterMediaController() {
         appendLog("Unregister media controller")
-        registerMediaControllerHandler?.removeCallbacks(registerMediaControllerTask)
+        handler?.removeCallbacks(registerMediaControllerTask)
         mediaController?.unregisterCallback(mediaControllerCallback)
         currentTitle = null
         mediaController = null
