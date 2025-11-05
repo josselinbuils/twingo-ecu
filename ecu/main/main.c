@@ -88,11 +88,21 @@ static esp_err_t __attribute__((unused)) i2c_master_read_slave(
 }
 
 void set_current_music(char *current_music) {
-  strcpy(music_title, strtok(current_music, "\n"));
-  strcpy(music_artist, strtok(NULL, "\n"));
+  if (strlen(current_music) > 0) {
+    strcpy(music_title, strtok(current_music, "\n"));
+    strcpy(music_artist, strtok(NULL, "\n"));
 
-  // We are going tow write in image buffer so we lock LVGL
-  lvgl_port_lock(-1);
+    // We are going tow write in image buffer so we lock LVGL
+    lvgl_port_lock(-1);
+  } else if (lvgl_port_lock(-1)) {
+    strcpy(music_title, "");
+    strcpy(music_artist, "");
+
+    lv_label_set_text(music_title_label, music_title);
+    lv_label_set_text(music_artist_label, music_artist);
+    lv_obj_add_flag(cover_img, LV_OBJ_FLAG_HIDDEN);
+    lvgl_port_unlock();
+  }
 }
 
 void set_music_cover(uint8_t *music_cover_map_src) {
@@ -136,6 +146,7 @@ void set_music_cover(uint8_t *music_cover_map_src) {
   lv_obj_align(music_artist_label, LV_ALIGN_BOTTOM_MID, left, -21);
   lv_label_set_text(music_title_label, music_title);
   lv_label_set_text(music_artist_label, music_artist);
+  lv_obj_clear_flag(cover_img, LV_OBJ_FLAG_HIDDEN);
   lv_img_set_src(cover_img, &music_cover);
   lv_obj_align_to(cover_img, music_title_label, LV_ALIGN_OUT_LEFT_MID, -15, 15);
   lvgl_port_unlock();
