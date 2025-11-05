@@ -17,7 +17,6 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -25,11 +24,8 @@ import android.os.Looper
 import android.provider.Settings
 import android.text.Spannable
 import android.text.SpannableString
-import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
 import android.util.Log
-import android.util.Range
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
@@ -37,7 +33,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.scale
-import com.google.android.material.color.MaterialColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
