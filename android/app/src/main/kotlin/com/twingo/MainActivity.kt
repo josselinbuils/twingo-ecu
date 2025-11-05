@@ -16,12 +16,20 @@ import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.CharacterStyle
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.Log
+import android.util.Range
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
@@ -29,6 +37,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.scale
+import com.google.android.material.color.MaterialColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,18 +81,11 @@ class MainActivity : AppCompatActivity() {
                     grayscaleMusicCover.setImageBitmap(grayscaleBitmap?.scale(128, 128))
                 }
             } else if (intent.action == Synchronizer.INTENT_LOG) {
-                val important =
-                    intent.getBooleanExtra(Synchronizer.INTENT_LOG_IMPORTANT, false)
+                val level = intent.getIntExtra(Synchronizer.INTENT_LOG_LEVEL, Log.DEBUG)
                 val message = intent.getStringExtra(Synchronizer.INTENT_LOG_MESSAGE)
 
                 if (message != null) {
-                    if (important) {
-                        appendLog("-")
-                        appendLog(message)
-                        appendLog("-")
-                    } else {
-                        appendLog(message)
-                    }
+                    appendLog(message, level)
                 }
             } else if (intent.action == Synchronizer.INTENT_NOTIFICATION_CANCELED) {
                 finish()
@@ -137,7 +139,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         appendLog("Activity created")
-        grantAppPermissions() { isGranted ->
+        grantAppPermissions { isGranted ->
             if (!isGranted) {
                 appendLog("⚠️Permission issue")
                 return@grantAppPermissions
@@ -212,17 +214,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     @SuppressLint("SetTextI18n")
-    private fun appendLog(message: String) {
-        var displayedMessage = message
-
-        if (displayedMessage == "-") {
-            displayedMessage = "----------------------------------------------------------"
-        }
-
-        Log.d("appendLog", displayedMessage)
+    private fun appendLog(message: String, level: Int = Log.DEBUG) {
+        Log.println(level, "appendLog", message)
         runOnUiThread {
-            val strTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-            textViewLog.text = textViewLog.text.toString() + "[$strTime] $displayedMessage\n"
+            val strTime = SimpleDateFormat("mm.ss", Locale.getDefault()).format(Date())
+            val text = SpannableString("[$strTime] $message\n")
+            val color = when (level) {
+                Log.DEBUG -> ForegroundColorSpan(Color.DKGRAY)
+                Log.ERROR -> ForegroundColorSpan(Color.RED)
+                Log.INFO -> ForegroundColorSpan(Color.rgb(126, 76, 245))
+                Log.WARN -> ForegroundColorSpan(Color.YELLOW)
+                else -> ForegroundColorSpan(Color.GRAY)
+            }
+
+            text.setSpan(color, 0, text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            textViewLog.append(text)
 
             // scroll after delay, because textView has to be updated first
             Handler(Looper.getMainLooper()).postDelayed({
@@ -273,7 +279,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensureBluetoothCanBeUsed(completion: (Boolean, String) -> Unit) {
-        enableBluetooth() { isEnabled ->
+        enableBluetooth { isEnabled ->
             if (!isEnabled) {
                 completion(false, "Bluetooth OFF")
                 return@enableBluetooth
