@@ -218,7 +218,7 @@ class MainActivity : AppCompatActivity() {
                 Log.DEBUG -> ForegroundColorSpan(Color.DKGRAY)
                 Log.ERROR -> ForegroundColorSpan(Color.RED)
                 Log.INFO -> ForegroundColorSpan(Color.rgb(126, 76, 245))
-                Log.WARN -> ForegroundColorSpan(Color.YELLOW)
+                Log.WARN -> ForegroundColorSpan(Color.rgb(210, 130, 0))
                 else -> ForegroundColorSpan(Color.GRAY)
             }
 
