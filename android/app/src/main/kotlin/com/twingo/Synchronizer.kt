@@ -120,10 +120,7 @@ class Synchronizer : Service() {
                 appendLog("Device address: ${device.address}")
 
                 handler?.removeCallbacks(restartGattServerTask)
-
-                if (isAdvertising) {
-                    stopAdvertising()
-                }
+                stopAdvertising()
                 unregisterMediaController()
                 handler?.postDelayed(
                     registerMediaControllerTask, REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
@@ -221,12 +218,8 @@ class Synchronizer : Service() {
             .build()
 
         startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-
         startGattServer()
-
-        if (connectedDevice == null) {
-            startAdvertising()
-        }
+        startAdvertising()
         handler = Handler(Looper.getMainLooper())
     }
 
@@ -291,7 +284,6 @@ class Synchronizer : Service() {
         appendLog("Restart GATT server", Log.INFO)
         handler?.removeCallbacks(restartGattServerTask)
         unregisterMediaController()
-        stopAdvertising()
         stopGattServer()
         startGattServer()
         startAdvertising()
@@ -347,11 +339,7 @@ class Synchronizer : Service() {
     }
 
     private fun startAdvertising() {
-        if (isAdvertising) {
-            appendLog("Cannot start advertising: already advertising", Log.WARN)
-        } else if (connectedDevice != null) {
-            appendLog("Cannot start advertising: device already connected", Log.WARN)
-        } else {
+        if (!isAdvertising && connectedDevice == null) {
             appendLog("Start advertising")
             isAdvertising = true
             bluetoothManager.adapter.bluetoothLeAdvertiser.startAdvertising(
@@ -397,8 +385,6 @@ class Synchronizer : Service() {
             appendLog("Stop advertising")
             isAdvertising = false
             bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
-        } else {
-            appendLog("Cannot stop advertising: not advertising", Log.WARN)
         }
     }
 
