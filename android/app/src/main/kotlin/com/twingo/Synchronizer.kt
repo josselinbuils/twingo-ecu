@@ -325,8 +325,11 @@ class Synchronizer : Service() {
             controller.registerCallback(mediaControllerCallback)
         } else {
             appendLog("No media controller found")
-            currentTitle = null
-            sendCurrentMusic(null)
+
+            if (currentTitle != "") {
+                currentTitle = ""
+                sendCurrentMusic(null)
+            }
         }
     }
 
