@@ -230,8 +230,6 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       return 0;
 
     case BLE_GAP_EVENT_CONNECT:
-      ESP_LOGI(TAG, "BLE_GAP_EVENT_CONNECT");
-
       // A new connection was established or a connection attempt failed
       if (event->connect.status == 0) {
         ESP_LOGI(TAG, "Connection established");
@@ -296,6 +294,11 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       );
 
       if (event->notify_rx.indication) {
+        if (event->notify_rx.attr_handle == 3) {
+          ESP_LOGI(TAG, "Peer disconnected");
+          ble_gap_terminate(event->notify_rx.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+          (*set_current_music_callback)("");
+        }
         return 0;
       }
 
