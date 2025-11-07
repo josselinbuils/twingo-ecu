@@ -4,7 +4,6 @@ import android.Manifest.permission.BLUETOOTH_ADVERTISE
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
 import android.Manifest.permission.POST_NOTIFICATIONS
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
@@ -33,12 +32,22 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.scale
+import java.io.File
+import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val PERMISSIONS_REQUEST_CODE = 2
+private const val LOGS_CACHE_FILENAME = "logs.txt"
 
 class MainActivity : AppCompatActivity() {
     private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
@@ -133,6 +142,30 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        appendLog(
+            "----------------------------------------------------------------", Log.INFO, false
+        )
+        appendLog("Previous session", Log.INFO, false)
+        appendLog(
+            "----------------------------------------------------------------", Log.INFO, false
+        )
+
+        loadLogs().forEach { log ->
+            val level = log.getValue("level").jsonPrimitive.intOrNull!!
+            val message = log.getValue("message").jsonPrimitive.content
+
+            textViewLog.append(formatLog(level, message))
+        }
+
+        appendLog(
+            "----------------------------------------------------------------", Log.INFO, false
+        )
+        appendLog("Current session", Log.INFO, false)
+        appendLog(
+            "----------------------------------------------------------------", Log.INFO, false
+        )
+
         appendLog("Activity created")
         grantAppPermissions { isGranted ->
             if (!isGranted) {
@@ -208,22 +241,14 @@ class MainActivity : AppCompatActivity() {
         appendLog("Logs cleared")
     }
 
-    @SuppressLint("SetTextI18n")
-    private fun appendLog(message: String, level: Int = Log.DEBUG) {
+    private fun appendLog(message: String, level: Int = Log.DEBUG, persist: Boolean = true) {
         Log.println(level, "appendLog", message)
         runOnUiThread {
-            val strTime = SimpleDateFormat("mm.ss", Locale.getDefault()).format(Date())
-            val text = SpannableString("[$strTime] $message\n")
-            val color = when (level) {
-                Log.DEBUG -> ForegroundColorSpan(Color.DKGRAY)
-                Log.ERROR -> ForegroundColorSpan(Color.RED)
-                Log.INFO -> ForegroundColorSpan(Color.rgb(126, 76, 245))
-                Log.WARN -> ForegroundColorSpan(Color.rgb(210, 130, 0))
-                else -> ForegroundColorSpan(Color.GRAY)
-            }
+            textViewLog.append(formatLog(level, message))
 
-            text.setSpan(color, 0, text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            textViewLog.append(text)
+            if (persist) {
+                persistLog(level, message)
+            }
 
             // scroll after delay, because textView has to be updated first
             Handler(Looper.getMainLooper()).postDelayed({
@@ -236,6 +261,22 @@ class MainActivity : AppCompatActivity() {
         Intent(this, Synchronizer::class.java).also { intent ->
             bindService(intent, synchronizerConnection, 0)
         }
+    }
+
+    private fun formatLog(level: Int, message: String): SpannableString {
+        val strTime = SimpleDateFormat("mm.ss", Locale.getDefault()).format(Date())
+        val text = SpannableString("[$strTime] $message\n")
+        val color = when (level) {
+            Log.DEBUG -> ForegroundColorSpan(Color.DKGRAY)
+            Log.ERROR -> ForegroundColorSpan(Color.RED)
+            Log.INFO -> ForegroundColorSpan(Color.rgb(126, 76, 245))
+            Log.WARN -> ForegroundColorSpan(Color.rgb(210, 130, 0))
+            else -> ForegroundColorSpan(Color.GRAY)
+        }
+
+        text.setSpan(color, 0, text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        return text
     }
 
     private fun hasNotificationAccess(): Boolean {
@@ -259,7 +300,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (isSuccess) {
                     activityResultHandlers.remove(requestCode)
-                    completion(isSuccess)
+                    completion(true)
                 } else {
                     // start activity for the request again
                     @Suppress("DEPRECATION")
@@ -309,6 +350,40 @@ class MainActivity : AppCompatActivity() {
                 requestPermissions(permissions, PERMISSIONS_REQUEST_CODE)
             }
         }
+    }
+
+    private fun loadLogs(): List<JsonObject> {
+        val cacheFile = File(this.cacheDir, LOGS_CACHE_FILENAME)
+
+        if (!cacheFile.exists()) {
+            return emptyList()
+        }
+
+        val logs = mutableListOf<JsonObject>()
+        val reader = InputStreamReader(cacheFile.inputStream())
+
+        reader.forEachLine { line ->
+            logs.add(Json.parseToJsonElement(line).jsonObject)
+        }
+        reader.close()
+
+        cacheFile.writeText("")
+
+        return logs
+    }
+
+    private fun persistLog(level: Int, message: String) {
+        val cacheFile = File(this.cacheDir, LOGS_CACHE_FILENAME)
+
+        if (!cacheFile.exists()) {
+            cacheFile.createNewFile()
+        }
+
+        val log = buildJsonObject {
+            put("level", level)
+            put("message", message)
+        }
+        cacheFile.appendText(log.toString() + System.lineSeparator())
     }
 
     private fun startSynchronizer() {
