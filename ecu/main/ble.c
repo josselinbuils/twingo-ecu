@@ -1,22 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
 #include "ble.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -43,119 +24,28 @@ static const ble_uuid_t *remote_chr_music_cover_uuid = BLE_UUID128_DECLARE(
 
 uint8_t music_cover_map[4096];
 
-static int blecent_gap_event(struct ble_gap_event *event, void *arg);
-
 void ble_store_config_init(void);
+static int on_gap_event(struct ble_gap_event *event, void *arg);
+static void on_reset(int reason);
+static void on_sync(void);
+static void scan(void);
+static int should_connect(const struct ble_gap_disc_desc *disc);
 
 void (*set_current_music_callback)(const char *current_music);
 void (*set_music_cover_callback)(const uint8_t *music_cover_map);
-
-/**
- * Called when service discovery of the specified peer has completed.
- */
-static void blecent_on_disc_complete(const struct peer *peer, int status, void *arg) {
-  if (status != 0) {
-    // Service discovery failed  Terminate the connection
-    ESP_LOGE(TAG, "Service discovery failed; status=%d conn_handle=%d", status, peer->conn_handle);
-    ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-    return;
-  }
-
-  /* Service discovery has completed successfully.  Now we have a complete
-   * list of services, characteristics, and descriptors that the peer
-   * supports.
-   */
-  ESP_LOGI(TAG, "Service discovery complete; status=%d conn_handle=%d", status, peer->conn_handle);
-
-  int rc = ble_gattc_exchange_mtu(peer->conn_handle, NULL, NULL);
-
-  if (rc != 0) {
-    ESP_LOGE(TAG, "Failed to negotiate MTU; rc = %d", rc);
-  }
-}
-
-/**
- * Initiates the GAP general discovery procedure.
- */
-static void blecent_scan(void) {
-  uint8_t own_addr_type;
-  struct ble_gap_disc_params disc_params = {0};
-  int rc;
-
-  // Figure out address to use while advertising (no privacy for now)
-  rc = ble_hs_id_infer_auto(0, &own_addr_type);
-  if (rc != 0) {
-    ESP_LOGE(TAG, "Error determining address type; rc=%d", rc);
-    return;
-  }
-
-  /* Tell the controller to filter duplicates; we don't want to process
-   * repeated advertisements from the same device.
-   */
-  disc_params.filter_duplicates = 1;
-
-  /**
-   * Perform a passive scan.  I.e., don't send follow-up scan requests to
-   * each advertiser.
-   */
-  disc_params.passive = 1;
-
-  // Use defaults for the rest of the parameters
-  disc_params.itvl = 0;
-  disc_params.window = 0;
-  disc_params.filter_policy = 0;
-  disc_params.limited = 0;
-
-  rc = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &disc_params, blecent_gap_event, NULL);
-  if (rc != 0) {
-    ESP_LOGE(TAG, "Error initiating GAP discovery procedure; rc=%d", rc);
-  }
-}
-
-/**
- * Indicates whether we should try to connect to the sender of the specified
- * advertisement.  The function returns a positive result if the device
- * advertises connectability and support for the Alert Notification service.
- */
-static int blecent_should_connect(const struct ble_gap_disc_desc *disc) {
-  struct ble_hs_adv_fields fields;
-  int rc;
-  int i;
-  uint32_t peer_addr[6];
-
-  memset(peer_addr, 0x0, sizeof peer_addr);
-
-  // The device has to be advertising connectability
-  if (disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_ADV_IND &&
-      disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_DIR_IND) {
-    return 0;
-  }
-
-  rc = ble_hs_adv_parse_fields(&fields, disc->data, disc->length_data);
-  if (rc != 0) {
-    return 0;
-  }
-
-  for (i = 0; i < fields.num_uuids128; i++) {
-    if (ble_uuid_cmp(&fields.uuids128[i].u, remote_svc_uuid) == 0) {
-      return 1;
-    }
-  }
-  return 0;
-}
 
 /**
  * Connects to the sender of the specified advertisement of it looks
  * interesting.  A device is "interesting" if it advertises connectability and
  * support for the Alert Notification service.
  */
-static void blecent_connect_if_interesting(void *disc) {
+static void connect_if_interesting(void *disc) {
   uint8_t own_addr_type;
   int rc;
   ble_addr_t *addr;
 
   // Don't do anything if we don't care about this advertiser
-  if (!blecent_should_connect((struct ble_gap_disc_desc *)disc)) {
+  if (!should_connect((struct ble_gap_disc_desc *)disc)) {
     return;
   }
 
@@ -182,7 +72,7 @@ static void blecent_connect_if_interesting(void *disc) {
    */
   addr = &((struct ble_gap_disc_desc *)disc)->addr;
 
-  rc = ble_gap_connect(own_addr_type, addr, 30000, NULL, blecent_gap_event, NULL);
+  rc = ble_gap_connect(own_addr_type, addr, 30000, NULL, on_gap_event, NULL);
 
   if (rc != 0) {
     ESP_LOGE(
@@ -193,6 +83,72 @@ static void blecent_connect_if_interesting(void *disc) {
       rc
     );
     return;
+  }
+}
+
+void host_task(void *param) {
+  ESP_LOGI(TAG, "BLE Host Task Started");
+  // This function will return only when nimble_port_stop() is executed
+  nimble_port_run();
+
+  nimble_port_freertos_deinit();
+}
+
+void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) {
+  // Initialize NVS — it is used to store PHY calibration data
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(ret);
+
+  set_current_music_callback = current_music_callback;
+  set_music_cover_callback = music_cover_callback;
+
+  ret = nimble_port_init();
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to init nimble %d ", ret);
+    return;
+  }
+
+  // Configure the host
+  ble_hs_cfg.reset_cb = on_reset;
+  ble_hs_cfg.sync_cb = on_sync;
+  ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+
+  int rc;
+  // Initialize data structures to track connected peers
+  rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 64, 64, 64);
+  assert(rc == 0);
+
+  // XXX Need to have template for store
+  ble_store_config_init();
+
+  nimble_port_freertos_init(host_task);
+}
+
+/**
+ * Called when service discovery of the specified peer has completed.
+ */
+static void on_disc_complete(const struct peer *peer, int status, void *arg) {
+  if (status != 0) {
+    // Service discovery failed  Terminate the connection
+    ESP_LOGE(TAG, "Service discovery failed; status=%d conn_handle=%d", status, peer->conn_handle);
+    ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    return;
+  }
+
+  /* Service discovery has completed successfully.  Now we have a complete
+   * list of services, characteristics, and descriptors that the peer
+   * supports.
+   */
+  ESP_LOGI(TAG, "Service discovery complete; status=%d conn_handle=%d", status, peer->conn_handle);
+
+  int rc = ble_gattc_exchange_mtu(peer->conn_handle, NULL, NULL);
+
+  if (rc != 0) {
+    ESP_LOGE(TAG, "Failed to negotiate MTU; rc = %d", rc);
   }
 }
 
@@ -210,7 +166,7 @@ static void blecent_connect_if_interesting(void *disc) {
  *                                  of the return code is specific to the
  *                                  particular GAP event being signalled.
  */
-static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
+static int on_gap_event(struct ble_gap_event *event, void *arg) {
   struct ble_gap_conn_desc desc;
   struct ble_hs_adv_fields fields;
   int rc;
@@ -226,7 +182,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       print_adv_fields(&fields);
 
       // Try to connect to the advertiser if it looks interesting
-      blecent_connect_if_interesting(&event->disc);
+      connect_if_interesting(&event->disc);
       return 0;
 
     case BLE_GAP_EVENT_CONNECT:
@@ -251,7 +207,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
         }
 
         // Perform service discovery
-        rc = peer_disc_all(event->connect.conn_handle, blecent_on_disc_complete, NULL);
+        rc = peer_disc_all(event->connect.conn_handle, on_disc_complete, NULL);
         if (rc != 0) {
           ESP_LOGE(TAG, "Failed to discover services; rc=%d", rc);
           return 0;
@@ -259,7 +215,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       } else {
         // Connection attempt failed; resume scanning
         ESP_LOGE(TAG, "Connection failed; status=%d", event->connect.status);
-        blecent_scan();
+        scan();
       }
 
       return 0;
@@ -273,7 +229,7 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
       peer_delete(event->disconnect.conn.conn_handle);
 
       // Resume scanning
-      blecent_scan();
+      scan();
       return 0;
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
@@ -379,11 +335,11 @@ static int blecent_gap_event(struct ble_gap_event *event, void *arg) {
   }
 }
 
-static void blecent_on_reset(int reason) {
+static void on_reset(int reason) {
   ESP_LOGE(TAG, "Resetting state; reason=%d", reason);
 }
 
-static void blecent_on_sync(void) {
+static void on_sync(void) {
   int rc;
 
   // Make sure we have proper identity address set (public preferred)
@@ -391,47 +347,75 @@ static void blecent_on_sync(void) {
   assert(rc == 0);
 
   // Begin scanning for a peripheral to connect to
-  blecent_scan();
+  scan();
 }
 
-void blecent_host_task(void *param) {
-  ESP_LOGI(TAG, "BLE Host Task Started");
-  // This function will return only when nimble_port_stop() is executed
-  nimble_port_run();
+/**
+ * Initiates the GAP general discovery procedure.
+ */
+static void scan(void) {
+  uint8_t own_addr_type;
+  struct ble_gap_disc_params disc_params = {0};
+  int rc;
 
-  nimble_port_freertos_deinit();
-}
-
-void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) {
-  // Initialize NVS — it is used to store PHY calibration data
-  esp_err_t ret = nvs_flash_init();
-  if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    ESP_ERROR_CHECK(nvs_flash_erase());
-    ret = nvs_flash_init();
-  }
-  ESP_ERROR_CHECK(ret);
-
-  set_current_music_callback = current_music_callback;
-  set_music_cover_callback = music_cover_callback;
-
-  ret = nimble_port_init();
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to init nimble %d ", ret);
+  // Figure out address to use while advertising (no privacy for now)
+  rc = ble_hs_id_infer_auto(0, &own_addr_type);
+  if (rc != 0) {
+    ESP_LOGE(TAG, "Error determining address type; rc=%d", rc);
     return;
   }
 
-  // Configure the host
-  ble_hs_cfg.reset_cb = blecent_on_reset;
-  ble_hs_cfg.sync_cb = blecent_on_sync;
-  ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+  /* Tell the controller to filter duplicates; we don't want to process
+   * repeated advertisements from the same device.
+   */
+  disc_params.filter_duplicates = 1;
 
+  /**
+   * Perform a passive scan.  I.e., don't send follow-up scan requests to
+   * each advertiser.
+   */
+  disc_params.passive = 1;
+
+  // Use defaults for the rest of the parameters
+  disc_params.itvl = 0;
+  disc_params.window = 0;
+  disc_params.filter_policy = 0;
+  disc_params.limited = 0;
+
+  rc = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &disc_params, on_gap_event, NULL);
+  if (rc != 0) {
+    ESP_LOGE(TAG, "Error initiating GAP discovery procedure; rc=%d", rc);
+  }
+}
+
+/**
+ * Indicates whether we should try to connect to the sender of the specified
+ * advertisement.  The function returns a positive result if the device
+ * advertises connectability and support for the Alert Notification service.
+ */
+static int should_connect(const struct ble_gap_disc_desc *disc) {
+  struct ble_hs_adv_fields fields;
   int rc;
-  // Initialize data structures to track connected peers
-  rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 64, 64, 64);
-  assert(rc == 0);
+  int i;
+  uint32_t peer_addr[6];
 
-  // XXX Need to have template for store
-  ble_store_config_init();
+  memset(peer_addr, 0x0, sizeof peer_addr);
 
-  nimble_port_freertos_init(blecent_host_task);
+  // The device has to be advertising connectability
+  if (disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_ADV_IND &&
+      disc->event_type != BLE_HCI_ADV_RPT_EVTYPE_DIR_IND) {
+    return 0;
+  }
+
+  rc = ble_hs_adv_parse_fields(&fields, disc->data, disc->length_data);
+  if (rc != 0) {
+    return 0;
+  }
+
+  for (i = 0; i < fields.num_uuids128; i++) {
+    if (ble_uuid_cmp(&fields.uuids128[i].u, remote_svc_uuid) == 0) {
+      return 1;
+    }
+  }
+  return 0;
 }
