@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattServer
 import android.bluetooth.BluetoothGattServerCallback
@@ -59,7 +60,8 @@ class Synchronizer : Service() {
         const val STATE_CENTRAL_DISCONNECTED = "CENTRAL_DISCONNECTED"
         const val STATE_GATT_SERVER_STOPPED = "GATT_SERVER_CLOSED"
         const val UUID_CHARACTERISTIC_CURRENT_MUSIC = "39394651-8477-4ffa-bc10-dfef56583a29"
-        const val UUID_CHARACTERISTIC_MUSIC_COVER = "39394653-8477-4ffa-bc10-dfef56583a29"
+        const val UUID_CHARACTERISTIC_MUSIC_COVER = "39394652-8477-4ffa-bc10-dfef56583a29"
+        const val UUID_CHARACTERISTIC_PING = "39394653-8477-4ffa-bc10-dfef56583a29"
         const val UUID_SERVICE = "39394650-8477-4ffa-bc10-dfef56583a29"
     }
 
@@ -116,7 +118,7 @@ class Synchronizer : Service() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 connectedDevice = device
-                log("Central has connected ($status)", LogLevel.INFO)
+                log("Central has connected", LogLevel.INFO)
                 log("Device address: ${device.address}")
 
                 handler?.removeCallbacks(restartGattServerTask)
@@ -128,12 +130,30 @@ class Synchronizer : Service() {
                 sendState(STATE_CENTRAL_CONNECTED)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connectedDevice = null
-                log("Central has disconnected ($status)", LogLevel.INFO)
+                log("Central has disconnected", LogLevel.INFO)
                 log("Device address: ${device.address}")
                 unregisterMediaController()
                 startAdvertising()
                 sendState(STATE_CENTRAL_DISCONNECTED)
                 handler?.postDelayed(restartGattServerTask, RESTART_GATT_SERVER_DELAY_MS.toLong())
+            }
+        }
+
+        override fun onCharacteristicReadRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            offset: Int,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            if (characteristic.uuid == UUID.fromString(UUID_CHARACTERISTIC_PING)) {
+                log("Ping received", LogLevel.VERBOSE)
+                gattServer?.sendResponse(
+                    device,
+                    requestId,
+                    BluetoothGatt.GATT_SUCCESS,
+                    0,
+                    byteArrayOf(1)
+                )
             }
         }
 
@@ -379,6 +399,13 @@ class Synchronizer : Service() {
             BluetoothGattCharacteristic.PERMISSION_READ
         )
         service.addCharacteristic(musicCoverCharacteristic)
+
+        val pingCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(UUID_CHARACTERISTIC_PING),
+            BluetoothGattCharacteristic.PROPERTY_READ,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+        service.addCharacteristic(pingCharacteristic)
 
         val result = gattServer?.addService(service) ?: false
 

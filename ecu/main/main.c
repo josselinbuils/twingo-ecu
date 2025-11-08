@@ -8,6 +8,7 @@
 
 #define TAG "ECU"
 
+const int BLE_CHECK_PERIOD_MS = 5000;
 const int RPM_READ_PERIOD_MS = 100;
 
 bool is_backlight_on = true;
@@ -66,9 +67,14 @@ void app_main() {
   }
 
   bool tachometer_found = false;
+
+  TimeOut_t ble_check_timeout;
+  TickType_t ble_check_ticks = pdMS_TO_TICKS(BLE_CHECK_PERIOD_MS);
+
   TimeOut_t rpm_timeout;
   TickType_t rpm_ticks = pdMS_TO_TICKS(RPM_READ_PERIOD_MS);
 
+  vTaskSetTimeOutState(&ble_check_timeout);
   vTaskSetTimeOutState(&rpm_timeout);
 
   while (true) {
@@ -80,6 +86,11 @@ void app_main() {
         ESP_LOGI(TAG, "Tachometer device found");
       }
       rpm_ticks = pdMS_TO_TICKS(RPM_READ_PERIOD_MS);
+    }
+
+    if (xTaskCheckForTimeOut(&ble_check_timeout, &ble_check_ticks) == pdTRUE) {
+      check_ble_connection();
+      ble_check_ticks = pdMS_TO_TICKS(BLE_CHECK_PERIOD_MS);
     }
   }
 }

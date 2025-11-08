@@ -10,35 +10,71 @@
 
 #define TAG "BLE"
 
+void ble_store_config_init(void);
+static int on_gap_event(struct ble_gap_event *event, void *arg);
+static int on_read_ping(
+  uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
+);
+static void on_reset(int reason);
+static void on_sync(void);
+static void scan(void);
+static int should_connect(const struct ble_gap_disc_desc *disc);
+
 static const ble_uuid_t *remote_svc_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x50, 0x46, 0x39, 0x39,
-); // 39394651-8477-4ffa-bc10-dfef56583a29
+);
 
 static const ble_uuid_t *remote_chr_current_music_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x51, 0x46, 0x39, 0x39,
 );
 
 static const ble_uuid_t *remote_chr_music_cover_uuid = BLE_UUID128_DECLARE(
+  0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x52, 0x46, 0x39, 0x39,
+);
+
+static const ble_uuid_t *remote_chr_ping_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x53, 0x46, 0x39, 0x39,
 );
 
 uint8_t music_cover_map[4096];
 
-void ble_store_config_init(void);
-static int on_gap_event(struct ble_gap_event *event, void *arg);
-static void on_reset(int reason);
-static void on_sync(void);
-static void scan(void);
-static int should_connect(const struct ble_gap_disc_desc *disc);
+u_int16_t peer_connection_handle = 0;
 
 void (*set_current_music_callback)(const char *current_music);
 void (*set_music_cover_callback)(const uint8_t *music_cover_map);
 
-/**
- * Connects to the sender of the specified advertisement of it looks
- * interesting.  A device is "interesting" if it advertises connectability and
- * support for the Alert Notification service.
- */
+int check_ble_connection() {
+  if (peer_connection_handle == 0) {
+    return 0;
+  }
+
+  struct peer *peer = peer_find(peer_connection_handle);
+
+  if (peer == NULL) {
+    ESP_LOGE(TAG, "Peer not found, aborting...");
+    goto error;
+  }
+
+  const struct peer_chr *chr = peer_chr_find_uuid(peer, remote_svc_uuid, remote_chr_ping_uuid);
+
+  if (chr == NULL) {
+    ESP_LOGE(TAG, "Peer does not support ping characteristic");
+    return 0;
+  }
+
+  int rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, on_read_ping, NULL);
+
+  if (rc != 0) {
+    ESP_LOGE(TAG, "Failed to read ping characteristic; rc=%d\n", rc);
+    goto error;
+  }
+  return 0;
+
+error:
+  ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+  return 1;
+}
+
 static void connect_if_interesting(void *disc) {
   uint8_t own_addr_type;
   int rc;
@@ -90,13 +126,13 @@ void host_task(void *param) {
   ESP_LOGI(TAG, "BLE Host Task Started");
   // This function will return only when nimble_port_stop() is executed
   nimble_port_run();
-
   nimble_port_freertos_deinit();
 }
 
 void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) {
   // Initialize NVS — it is used to store PHY calibration data
   esp_err_t ret = nvs_flash_init();
+
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
     ESP_ERROR_CHECK(nvs_flash_erase());
     ret = nvs_flash_init();
@@ -107,6 +143,7 @@ void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) 
   set_music_cover_callback = music_cover_callback;
 
   ret = nimble_port_init();
+
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to init nimble %d ", ret);
     return;
@@ -117,14 +154,11 @@ void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) 
   ble_hs_cfg.sync_cb = on_sync;
   ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
-  int rc;
   // Initialize data structures to track connected peers
-  rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 64, 64, 64);
+  int rc = peer_init(MYNEWT_VAL(BLE_MAX_CONNECTIONS), 64, 64, 64);
   assert(rc == 0);
 
-  // XXX Need to have template for store
   ble_store_config_init();
-
   nimble_port_freertos_init(host_task);
 }
 
@@ -133,16 +167,13 @@ void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) 
  */
 static void on_disc_complete(const struct peer *peer, int status, void *arg) {
   if (status != 0) {
-    // Service discovery failed  Terminate the connection
     ESP_LOGE(TAG, "Service discovery failed; status=%d conn_handle=%d", status, peer->conn_handle);
     ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
     return;
   }
 
-  /* Service discovery has completed successfully.  Now we have a complete
-   * list of services, characteristics, and descriptors that the peer
-   * supports.
-   */
+  peer_connection_handle = peer->conn_handle;
+
   ESP_LOGI(TAG, "Service discovery complete; status=%d conn_handle=%d", status, peer->conn_handle);
 
   int rc = ble_gattc_exchange_mtu(peer->conn_handle, NULL, NULL);
@@ -152,20 +183,6 @@ static void on_disc_complete(const struct peer *peer, int status, void *arg) {
   }
 }
 
-/**
- * The nimble host executes this callback when a GAP event occurs.  The
- * application associates a GAP event callback with each connection that is
- * established.  blecent uses the same callback for all connections.
- *
- * @param event                 The event being signalled.
- * @param arg                   Application-specified argument; unused by
- *                                  blecent.
- *
- * @return                      0 if the application successfully handled the
- *                                  event; nonzero on failure.  The semantics
- *                                  of the return code is specific to the
- *                                  particular GAP event being signalled.
- */
 static int on_gap_event(struct ble_gap_event *event, void *arg) {
   struct ble_gap_conn_desc desc;
   struct ble_hs_adv_fields fields;
@@ -181,7 +198,6 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       // An advertisement report was received during GAP discovery
       print_adv_fields(&fields);
 
-      // Try to connect to the advertiser if it looks interesting
       connect_if_interesting(&event->disc);
       return 0;
 
@@ -221,12 +237,13 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
-      // Connection terminated
       ESP_LOGI(TAG, "Disconnect; reason=%d ", event->disconnect.reason);
       print_conn_desc(&event->disconnect.conn);
 
-      // Forget about peer
       peer_delete(event->disconnect.conn.conn_handle);
+
+      peer_connection_handle = 0;
+      (*set_current_music_callback)("");
 
       // Resume scanning
       scan();
@@ -250,11 +267,6 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       );
 
       if (event->notify_rx.indication) {
-        if (event->notify_rx.attr_handle == 3) {
-          ESP_LOGI(TAG, "Peer disconnected");
-          ble_gap_terminate(event->notify_rx.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-          (*set_current_music_callback)("");
-        }
         return 0;
       }
 
@@ -333,6 +345,19 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       ESP_LOGI(TAG, "Unknown event received: %d", event->type);
       return 0;
   }
+}
+
+static int on_read_ping(
+  uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
+) {
+  ESP_LOGI(TAG, "Ping read complete; status=%d conn_handle=%d", error->status, conn_handle);
+
+  if (error->status > 0) {
+    ESP_LOGI(TAG, "Device did not answer to ping");
+    ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+  }
+
+  return 0;
 }
 
 static void on_reset(int reason) {
