@@ -26,11 +26,11 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelUuid
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import androidx.core.graphics.set
+import com.twingo.lib.LogLevel
 import java.text.Normalizer
 import java.util.UUID
 import kotlin.math.ceil
@@ -94,7 +94,7 @@ class Synchronizer : Service() {
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            appendLog("Advertising started")
+            log("Advertising started")
         }
 
         override fun onStartFailure(errorCode: Int) {
@@ -106,7 +106,7 @@ class Synchronizer : Service() {
                 ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "\nADVERTISE_FAILED_FEATURE_UNSUPPORTED"
                 else -> ""
             }
-            appendLog("Advertise start failed: errorCode=$errorCode $desc", Log.ERROR)
+            log("Advertise start failed: errorCode=$errorCode $desc", LogLevel.ERROR)
             isAdvertising = false
         }
     }
@@ -115,8 +115,8 @@ class Synchronizer : Service() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 connectedDevice = device
-                appendLog("Central has connected ($status)", Log.INFO)
-                appendLog("Device address: ${device.address}")
+                log("Central has connected ($status)", LogLevel.INFO)
+                log("Device address: ${device.address}")
 
                 handler?.removeCallbacks(restartGattServerTask)
                 stopAdvertising()
@@ -127,8 +127,8 @@ class Synchronizer : Service() {
                 sendState(STATE_CENTRAL_CONNECTED)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connectedDevice = null
-                appendLog("Central has disconnected ($status)", Log.INFO)
-                appendLog("Device address: ${device.address}")
+                log("Central has disconnected ($status)", LogLevel.INFO)
+                log("Device address: ${device.address}")
                 unregisterMediaController()
                 startAdvertising()
                 sendState(STATE_CENTRAL_DISCONNECTED)
@@ -137,7 +137,7 @@ class Synchronizer : Service() {
         }
 
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
-            appendLog("MTU changed: $mtu")
+            log("MTU changed: $mtu")
             instance.mtu = mtu
         }
     }
@@ -149,15 +149,15 @@ class Synchronizer : Service() {
 
             if (newCurrentTitle != currentTitle && bitmap != null) {
                 currentTitle = newCurrentTitle
-                appendLog("Current music changed", Log.INFO)
+                log("Current music changed", LogLevel.INFO)
                 sendCurrentMusic(metadata)
             } else if (DEBUG) {
-                appendLog("Current music did not change")
+                log("Current music did not change")
             }
         }
 
         override fun onSessionDestroyed() {
-            appendLog("Media session destroyed")
+            log("Media session destroyed")
         }
     }
 
@@ -165,7 +165,7 @@ class Synchronizer : Service() {
         registerMediaController()
 
         if (handler == null) {
-            appendLog("Handler not initialised", Log.ERROR)
+            log("Handler not initialised", LogLevel.ERROR)
         }
         handler?.postDelayed(registerMediaControllerTask, REGISTER_CONTROLLER_INTERVAL_MS.toLong())
     }
@@ -179,7 +179,7 @@ class Synchronizer : Service() {
     }
 
     override fun onCreate() {
-        appendLog("Start Synchronizer service")
+        log("Start Synchronizer service")
 
         val notificationManager = getSystemService(NotificationManager::class.java)
         var notificationChannel =
@@ -233,11 +233,11 @@ class Synchronizer : Service() {
         val server = gattServer
 
         if (server == null) {
-            appendLog("Cannot send notification: GATT server not running", Log.ERROR)
+            log("Cannot send notification: GATT server not running", LogLevel.ERROR)
             return
         }
         if (device == null) {
-            appendLog("Cannot send notification: device not connected", Log.ERROR)
+            log("Cannot send notification: device not connected", LogLevel.ERROR)
             return
         }
 
@@ -250,7 +250,7 @@ class Synchronizer : Service() {
                 val numberOfNotifications =
                     ceil(data.size.toDouble() / notificationDataByteSize).toInt()
 
-                appendLog("Sending $numberOfNotifications notifications: ${data.size} bytes")
+                log("Sending $numberOfNotifications notifications: ${data.size} bytes")
 
                 for (index in 0..<numberOfNotifications) {
                     val offset = notificationDataByteSize * (numberOfNotifications - index - 1)
@@ -266,7 +266,7 @@ class Synchronizer : Service() {
                     )
                 }
             } else {
-                appendLog(
+                log(
                     "Sending notification: \"${
                         data.toString(Charsets.UTF_8).replace("\n", "\\n")
                     }\""
@@ -279,7 +279,7 @@ class Synchronizer : Service() {
     }
 
     fun restartGattServer() {
-        appendLog("Restart GATT server", Log.INFO)
+        log("Restart GATT server", LogLevel.INFO)
         handler?.removeCallbacks(restartGattServerTask)
         unregisterMediaController()
         stopAdvertising()
@@ -288,15 +288,15 @@ class Synchronizer : Service() {
         startAdvertising()
     }
 
-    private fun appendLog(message: String, level: Int = Log.DEBUG) {
+    private fun log(message: String, level: LogLevel = LogLevel.DEBUG) {
         val intent = Intent(INTENT_LOG)
-        intent.putExtra(INTENT_LOG_LEVEL, level)
+        intent.putExtra(INTENT_LOG_LEVEL, level.name)
         intent.putExtra(INTENT_LOG_MESSAGE, message)
         this.sendBroadcast(intent)
     }
 
     private fun registerMediaController() {
-        appendLog("Register media controller", Log.VERBOSE)
+        log("Register media controller", LogLevel.VERBOSE)
 
         val componentName = ComponentName(instance, NotificationListener::class.java)
         val controller = mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
@@ -310,12 +310,12 @@ class Synchronizer : Service() {
 
             if (newCurrentTitle != currentTitle) {
                 currentTitle = newCurrentTitle
-                appendLog("Current music changed", Log.INFO)
+                log("Current music changed", LogLevel.INFO)
                 sendCurrentMusic(metadata)
             }
             controller.registerCallback(mediaControllerCallback)
         } else {
-            appendLog("No media controller found")
+            log("No media controller found")
 
             if (currentTitle != "") {
                 currentTitle = ""
@@ -339,7 +339,7 @@ class Synchronizer : Service() {
 
     private fun startAdvertising() {
         if (!isAdvertising && connectedDevice == null) {
-            appendLog("Start advertising")
+            log("Start advertising")
             isAdvertising = true
             bluetoothManager.adapter.bluetoothLeAdvertiser.startAdvertising(
                 advertiseSettings, advertiseData, advertiseCallback
@@ -348,7 +348,7 @@ class Synchronizer : Service() {
     }
 
     private fun startGattServer() {
-        appendLog("Start GATT server")
+        log("Start GATT server")
 
         this.gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
 
@@ -373,15 +373,15 @@ class Synchronizer : Service() {
         val result = gattServer?.addService(service) ?: false
 
         if (result) {
-            appendLog("GATT service added")
+            log("GATT service added")
         } else {
-            appendLog("GATT service not added", Log.ERROR)
+            log("GATT service not added", LogLevel.ERROR)
         }
     }
 
     private fun stopAdvertising() {
         if (isAdvertising) {
-            appendLog("Stop advertising")
+            log("Stop advertising")
             isAdvertising = false
             bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
         }
@@ -389,20 +389,20 @@ class Synchronizer : Service() {
 
     private fun stopGattServer() {
         if (gattServer != null) {
-            appendLog("Stop GATT server")
+            log("Stop GATT server")
             gattServer?.close()
             gattServer = null
             sendState(STATE_GATT_SERVER_STOPPED)
         } else {
-            appendLog("Cannot stop GATT server: not running", Log.WARN)
+            log("Cannot stop GATT server: not running", LogLevel.WARNING)
         }
     }
 
     private fun sendCurrentMusic(metadata: MediaMetadata?) {
-        appendLog("Send current music")
+        log("Send current music")
 
         if (connectedDevice == null) {
-            appendLog("Cannot send current music: device not connected", Log.ERROR)
+            log("Cannot send current music: device not connected", LogLevel.ERROR)
             return
         }
         var bitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
@@ -462,7 +462,7 @@ class Synchronizer : Service() {
     }
 
     private fun unregisterMediaController() {
-        appendLog("Unregister media controller")
+        log("Unregister media controller")
         handler?.removeCallbacks(registerMediaControllerTask)
         mediaController?.unregisterCallback(mediaControllerCallback)
         currentTitle = null

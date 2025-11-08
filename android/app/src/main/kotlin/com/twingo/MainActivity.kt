@@ -36,38 +36,38 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.scale
 import com.google.android.material.textfield.TextInputLayout
+import com.twingo.lib.AppLog
+import com.twingo.lib.LogLevel
 import java.io.File
 import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import kotlin.math.log
 
+private const val CURRENT_SESSION = "current"
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
-private const val PERMISSIONS_REQUEST_CODE = 2
 private const val LOGS_CACHE_FILENAME = "logs.txt"
+private const val PERMISSIONS_REQUEST_CODE = 2
+private const val PREVIOUS_SESSION = "previous"
 
 class MainActivity : AppCompatActivity() {
     private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
     private val broadcastReceiver = Receiver()
-    private var currentSessionLogs = mutableListOf<SpannableString>()
+    private var currentSessionLogs = mutableListOf<AppLog>()
     private val editTextCurrentMusicCharacteristic: EditText
         get() = findViewById(R.id.edit_current_music)
     private val grayscaleMusicCover: ImageView
         get() = findViewById(R.id.image_grayscale_music_cover)
+    private var logLevel = LogLevel.DEBUG
+    private val logLevelDropdown: TextInputLayout
+        get() = findViewById(R.id.dropdown_log_level)
     private val musicCover: ImageView
         get() = findViewById(R.id.image_music_cover)
     private var permissionResultHandler: ((Array<out String>, IntArray) -> Unit)? = null
-    private var previousSessionLogs = mutableListOf<SpannableString>()
+    private var previousSessionLogs = mutableListOf<AppLog>()
+    private var session = CURRENT_SESSION
     private val sessionDropdown: TextInputLayout
-        get() = findViewById(R.id.session_dropdown)
+        get() = findViewById(R.id.dropdown_session)
     private val scrollViewLog: ScrollView
         get() = findViewById(R.id.scroll_logs)
     private var synchronizer: Synchronizer? = null
@@ -94,11 +94,11 @@ class MainActivity : AppCompatActivity() {
                     grayscaleMusicCover.setImageBitmap(grayscaleBitmap?.scale(128, 128))
                 }
             } else if (intent.action == Synchronizer.INTENT_LOG) {
-                val level = intent.getIntExtra(Synchronizer.INTENT_LOG_LEVEL, Log.DEBUG)
+                val level = LogLevel.valueOf(intent.getStringExtra(Synchronizer.INTENT_LOG_LEVEL)!!)
                 val message = intent.getStringExtra(Synchronizer.INTENT_LOG_MESSAGE)
 
                 if (message != null) {
-                    appendLog(message, level)
+                    log(message, level)
                 }
             } else if (intent.action == Synchronizer.INTENT_NOTIFICATION_CANCELED) {
                 finish()
@@ -118,7 +118,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             } else {
-                appendLog("Unknown intent: ${intent.action}")
+                log("Unknown intent: ${intent.action}")
             }
         }
     }
@@ -129,12 +129,12 @@ class MainActivity : AppCompatActivity() {
             if (service !is Synchronizer.LocalBinder) {
                 return
             }
-            appendLog("Synchronizer service connected")
+            log("Synchronizer service connected")
             synchronizer = service.getService()
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
-            appendLog("Synchronizer service disconnected")
+            log("Synchronizer service disconnected")
             synchronizer = null
         }
     }
@@ -144,9 +144,9 @@ class MainActivity : AppCompatActivity() {
         activityResultHandlers[requestCode]?.let { handler ->
             handler(resultCode)
         } ?: run {
-            appendLog(
+            log(
                 "onActivityResult requestCode=$requestCode result=$resultCode not handled",
-                Log.ERROR
+                LogLevel.ERROR
             )
         }
     }
@@ -156,41 +156,52 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         val sessionAutocomplete = (sessionDropdown.editText as? AutoCompleteTextView)
-        val items = listOf(
-            getString(R.string.text_previous_session), getString(R.string.text_current_session)
+        val sessionItems = listOf(
+            getString(R.string.option_previous_session), getString(R.string.option_current_session)
         )
-        val adapter = ArrayAdapter(this, R.layout.list_item, items)
-        sessionAutocomplete?.setAdapter(adapter)
-        sessionAutocomplete?.setText(getString(R.string.text_current_session), false)
+        sessionAutocomplete?.setAdapter(ArrayAdapter(this, R.layout.list_item, sessionItems))
+        sessionAutocomplete?.setText(getString(R.string.option_current_session), false)
         sessionAutocomplete?.onItemClickListener =
             AdapterView.OnItemClickListener { _, _, position, _ ->
-                appendLog("onItemClickListener $position ${items[position]}")
-
-                if (items[position] == getString(R.string.text_previous_session)) {
-                    textViewLog.text = ""
-                    previousSessionLogs.forEach { log -> textViewLog.append(log) }
+                if (sessionItems[position] == getString(R.string.option_previous_session)) {
+                    session = PREVIOUS_SESSION
+                    displayLogs(previousSessionLogs)
                 } else {
-                    textViewLog.text = ""
-                    currentSessionLogs.forEach { log -> textViewLog.append(log) }
+                    session = CURRENT_SESSION
+                    displayLogs(currentSessionLogs)
                 }
             }
 
-        loadLogs().forEach { log ->
-            val level = log.getValue("level").jsonPrimitive.intOrNull!!
-            val message = log.getValue("message").jsonPrimitive.content
-            previousSessionLogs.add(formatLog(level, message))
-        }
+        val logLevelAutocomplete = (logLevelDropdown.editText as? AutoCompleteTextView)
+        val logLevelItems = listOf(
+            LogLevel.VERBOSE.name, LogLevel.DEBUG.name, LogLevel.INFO.name, LogLevel.WARNING.name,
+            LogLevel.ERROR.name
+        )
+        logLevelAutocomplete?.setAdapter(ArrayAdapter(this, R.layout.list_item, logLevelItems))
+        logLevelAutocomplete?.setText(logLevel.name, false)
+        logLevelAutocomplete?.onItemClickListener =
+            AdapterView.OnItemClickListener { _, _, position, _ ->
+                logLevel = LogLevel.valueOf(logLevelItems[position])
 
-        appendLog("Activity created")
+                if (session === CURRENT_SESSION) {
+                    displayLogs(currentSessionLogs)
+                } else {
+                    displayLogs(previousSessionLogs)
+                }
+            }
+
+        loadPreviousSessionLogs()
+
+        log("Session started", LogLevel.INFO)
 
         grantAppPermissions { isGranted ->
             if (!isGranted) {
-                appendLog("Permissions not granted", Log.ERROR)
+                log("Permissions not granted", LogLevel.ERROR)
                 return@grantAppPermissions
             }
 
             if (!hasNotificationAccess()) {
-                appendLog("Notification service not enabled", Log.ERROR)
+                log("Notification service not enabled", LogLevel.ERROR)
 
                 try {
                     val settingsIntent =
@@ -213,7 +224,7 @@ class MainActivity : AppCompatActivity() {
 
             ensureBluetoothCanBeUsed { isSuccess, message ->
                 runOnUiThread {
-                    appendLog(message)
+                    log(message)
 
                     if (isSuccess) {
                         startSynchronizer()
@@ -246,28 +257,35 @@ class MainActivity : AppCompatActivity() {
         permissionResultHandler?.let { handler ->
             handler(permissions, grantResults)
         } ?: run {
-            appendLog("onRequestPermissionsResult requestCode=$requestCode not handled", Log.ERROR)
+            log(
+                "onRequestPermissionsResult requestCode=$requestCode not handled",
+                LogLevel.ERROR
+            )
         }
     }
 
     fun onTapClearLog(view: View) {
         textViewLog.text = ""
-        appendLog("Logs cleared")
+        log("Logs cleared")
     }
 
-    private fun appendLog(message: String, level: Int = Log.DEBUG) {
-        Log.println(level, "appendLog", message)
-        runOnUiThread {
-            val log = formatLog(level, message)
-            textViewLog.append(log)
-            currentSessionLogs.add(log)
-            persistLog(level, message)
-
-            // scroll after delay, because textView has to be updated first
-            Handler(Looper.getMainLooper()).postDelayed({
-                scrollViewLog.fullScroll(View.FOCUS_DOWN)
-            }, 16)
+    private fun appendLog(log: AppLog) {
+        val strTime = SimpleDateFormat("mm.ss", Locale.getDefault()).format(Date(log.time))
+        val text = SpannableString("[$strTime] ${log.message}")
+        val color = when (log.level) {
+            LogLevel.DEBUG -> ForegroundColorSpan(Color.DKGRAY)
+            LogLevel.ERROR -> ForegroundColorSpan(Color.RED)
+            LogLevel.INFO -> ForegroundColorSpan(Color.rgb(126, 76, 245))
+            LogLevel.WARNING -> ForegroundColorSpan(Color.rgb(210, 130, 0))
+            else -> ForegroundColorSpan(Color.GRAY)
         }
+
+        text.setSpan(color, 0, text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        if (textViewLog.text.length > 0) {
+            textViewLog.append("\n")
+        }
+        textViewLog.append(text)
     }
 
     private fun bindSynchronizerIfRunning() {
@@ -276,26 +294,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun formatLog(level: Int, message: String): SpannableString {
-        val strTime = SimpleDateFormat("mm.ss", Locale.getDefault()).format(Date())
-        val text = SpannableString("[$strTime] $message\n")
-        val color = when (level) {
-            Log.DEBUG -> ForegroundColorSpan(Color.DKGRAY)
-            Log.ERROR -> ForegroundColorSpan(Color.RED)
-            Log.INFO -> ForegroundColorSpan(Color.rgb(126, 76, 245))
-            Log.WARN -> ForegroundColorSpan(Color.rgb(210, 130, 0))
-            else -> ForegroundColorSpan(Color.GRAY)
+    private fun displayLogs(logs: List<AppLog>) {
+        textViewLog.text = ""
+
+        logs.forEach { log ->
+            if (log.level.ordinal >= logLevel.ordinal) {
+                appendLog(log)
+            }
         }
-
-        text.setSpan(color, 0, text.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-
-        return text
-    }
-
-    private fun hasNotificationAccess(): Boolean {
-        return Settings.Secure.getString(
-            contentResolver, "enabled_notification_listeners"
-        ).contains(packageName)
     }
 
     private fun enableBluetooth(completion: (Boolean) -> Unit) {
@@ -347,16 +353,16 @@ class MainActivity : AppCompatActivity() {
             completion(true)
         } else {
             runOnUiThread {
-                appendLog("Permissions not granted, requesting")
+                log("Permissions not granted, requesting")
 
                 permissionResultHandler = { permissions, grantResults ->
                     val isSuccess = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
 
                     if (isSuccess) {
-                        appendLog("Permissions granted")
+                        log("Permissions granted")
                         completion(true)
                     } else {
-                        appendLog("Permissions not granted, requesting")
+                        log("Permissions not granted, requesting")
                         requestPermissions(permissions, PERMISSIONS_REQUEST_CODE)
                     }
                 }
@@ -365,38 +371,55 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadLogs(): List<JsonObject> {
+    private fun hasNotificationAccess(): Boolean {
+        return Settings.Secure.getString(
+            contentResolver, "enabled_notification_listeners"
+        ).contains(packageName)
+    }
+
+    private fun loadPreviousSessionLogs() {
         val cacheFile = File(this.cacheDir, LOGS_CACHE_FILENAME)
 
         if (!cacheFile.exists()) {
-            return emptyList()
+            return
         }
 
-        val logs = mutableListOf<JsonObject>()
         val reader = InputStreamReader(cacheFile.inputStream())
 
         reader.forEachLine { line ->
-            logs.add(Json.parseToJsonElement(line).jsonObject)
+            previousSessionLogs.add(AppLog.fromJsonString(line))
         }
         reader.close()
 
         cacheFile.writeText("")
-
-        return logs
     }
 
-    private fun persistLog(level: Int, message: String) {
+    private fun log(message: String, level: LogLevel = LogLevel.DEBUG) {
+        Log.println(Log.DEBUG, "com.twingo", "Log: ${level.name} $message")
+        runOnUiThread {
+            val log = AppLog(level, message)
+
+            currentSessionLogs.add(log)
+            persistLog(log)
+
+            if (session == CURRENT_SESSION && log.level.ordinal >= logLevel.ordinal) {
+                appendLog(log)
+
+                // scroll after delay, because textView has to be updated first
+                Handler(Looper.getMainLooper()).postDelayed({
+                    scrollViewLog.fullScroll(View.FOCUS_DOWN)
+                }, 16)
+            }
+        }
+    }
+
+    private fun persistLog(log: AppLog) {
         val cacheFile = File(this.cacheDir, LOGS_CACHE_FILENAME)
 
         if (!cacheFile.exists()) {
             cacheFile.createNewFile()
         }
-
-        val log = buildJsonObject {
-            put("level", level)
-            put("message", message)
-        }
-        cacheFile.appendText(log.toString() + System.lineSeparator())
+        cacheFile.appendText(log.toJsonString() + System.lineSeparator())
     }
 
     private fun startSynchronizer() {
