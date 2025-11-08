@@ -78,6 +78,24 @@
         app:layout_constraintTop_toBottomOf="@+id/edit_current_music"
         tools:ignore="ContentDescription" />
 
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/session_dropdown"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:hint="Session"
+        app:layout_constraintTop_toBottomOf="@+id/image_music_cover">
+
+        <AutoCompleteTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="none"
+            android:padding="8dp" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
     <ScrollView
         android:id="@+id/scroll_logs"
         android:layout_width="match_parent"
@@ -91,12 +109,13 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/image_music_cover">
+        app:layout_constraintTop_toBottomOf="@+id/session_dropdown">
 
         <TextView
             android:id="@+id/text_logs"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:textSize="16sp" />
 
     </ScrollView>
 

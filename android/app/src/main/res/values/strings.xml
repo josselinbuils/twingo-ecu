@@ -3,7 +3,9 @@
     <string name="button_clear">Clear</string>
     <string name="button_notify">Notify</string>
     <string name="text_connected">Central connected</string>
+    <string name="text_current_music">Music title\nArtist</string>
+    <string name="text_current_session">Current</string>
     <string name="text_disconnected">Central not connected</string>
     <string name="text_notify_characteristic">Notify characteristic:</string>
-    <string name="text_current_music">Music title\nArtist</string>
+    <string name="text_previous_session">Previous</string>
 </resources>

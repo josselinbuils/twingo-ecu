@@ -1,6 +1,5 @@
 package com.twingo
 
-import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -179,7 +178,6 @@ class Synchronizer : Service() {
         return binder
     }
 
-    @SuppressLint("LaunchActivityFromNotification")
     override fun onCreate() {
         appendLog("Start Synchronizer service")
 

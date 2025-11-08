@@ -26,12 +26,16 @@ import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.scale
+import com.google.android.material.textfield.TextInputLayout
 import java.io.File
 import java.io.InputStreamReader
 import java.text.SimpleDateFormat
@@ -44,6 +48,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlin.math.log
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val PERMISSIONS_REQUEST_CODE = 2
@@ -52,6 +57,7 @@ private const val LOGS_CACHE_FILENAME = "logs.txt"
 class MainActivity : AppCompatActivity() {
     private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
     private val broadcastReceiver = Receiver()
+    private var currentSessionLogs = mutableListOf<SpannableString>()
     private val editTextCurrentMusicCharacteristic: EditText
         get() = findViewById(R.id.edit_current_music)
     private val grayscaleMusicCover: ImageView
@@ -59,6 +65,9 @@ class MainActivity : AppCompatActivity() {
     private val musicCover: ImageView
         get() = findViewById(R.id.image_music_cover)
     private var permissionResultHandler: ((Array<out String>, IntArray) -> Unit)? = null
+    private var previousSessionLogs = mutableListOf<SpannableString>()
+    private val sessionDropdown: TextInputLayout
+        get() = findViewById(R.id.session_dropdown)
     private val scrollViewLog: ScrollView
         get() = findViewById(R.id.scroll_logs)
     private var synchronizer: Synchronizer? = null
@@ -135,7 +144,10 @@ class MainActivity : AppCompatActivity() {
         activityResultHandlers[requestCode]?.let { handler ->
             handler(resultCode)
         } ?: run {
-            appendLog("Error: onActivityResult requestCode=$requestCode result=$resultCode not handled")
+            appendLog(
+                "onActivityResult requestCode=$requestCode result=$resultCode not handled",
+                Log.ERROR
+            )
         }
     }
 
@@ -143,38 +155,42 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        appendLog(
-            "----------------------------------------------------------------", Log.INFO, false
+        val sessionAutocomplete = (sessionDropdown.editText as? AutoCompleteTextView)
+        val items = listOf(
+            getString(R.string.text_previous_session), getString(R.string.text_current_session)
         )
-        appendLog("Previous session", Log.INFO, false)
-        appendLog(
-            "----------------------------------------------------------------", Log.INFO, false
-        )
+        val adapter = ArrayAdapter(this, R.layout.list_item, items)
+        sessionAutocomplete?.setAdapter(adapter)
+        sessionAutocomplete?.setText(getString(R.string.text_current_session), false)
+        sessionAutocomplete?.onItemClickListener =
+            AdapterView.OnItemClickListener { _, _, position, _ ->
+                appendLog("onItemClickListener $position ${items[position]}")
+
+                if (items[position] == getString(R.string.text_previous_session)) {
+                    textViewLog.text = ""
+                    previousSessionLogs.forEach { log -> textViewLog.append(log) }
+                } else {
+                    textViewLog.text = ""
+                    currentSessionLogs.forEach { log -> textViewLog.append(log) }
+                }
+            }
 
         loadLogs().forEach { log ->
             val level = log.getValue("level").jsonPrimitive.intOrNull!!
             val message = log.getValue("message").jsonPrimitive.content
-
-            textViewLog.append(formatLog(level, message))
+            previousSessionLogs.add(formatLog(level, message))
         }
 
-        appendLog(
-            "----------------------------------------------------------------", Log.INFO, false
-        )
-        appendLog("Current session", Log.INFO, false)
-        appendLog(
-            "----------------------------------------------------------------", Log.INFO, false
-        )
-
         appendLog("Activity created")
+
         grantAppPermissions { isGranted ->
             if (!isGranted) {
-                appendLog("⚠️Permission issue")
+                appendLog("Permissions not granted", Log.ERROR)
                 return@grantAppPermissions
             }
 
             if (!hasNotificationAccess()) {
-                appendLog("⚠️Notification service not enabled")
+                appendLog("Notification service not enabled", Log.ERROR)
 
                 try {
                     val settingsIntent =
@@ -213,7 +229,6 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(broadcastReceiver)
     }
 
-    @Suppress("unused")
     fun onTapSend(view: View) {
         val synchronizer = synchronizer
 
@@ -231,24 +246,22 @@ class MainActivity : AppCompatActivity() {
         permissionResultHandler?.let { handler ->
             handler(permissions, grantResults)
         } ?: run {
-            appendLog("Error: onRequestPermissionsResult requestCode=$requestCode not handled")
+            appendLog("onRequestPermissionsResult requestCode=$requestCode not handled", Log.ERROR)
         }
     }
 
-    @Suppress("unused")
     fun onTapClearLog(view: View) {
         textViewLog.text = ""
         appendLog("Logs cleared")
     }
 
-    private fun appendLog(message: String, level: Int = Log.DEBUG, persist: Boolean = true) {
+    private fun appendLog(message: String, level: Int = Log.DEBUG) {
         Log.println(level, "appendLog", message)
         runOnUiThread {
-            textViewLog.append(formatLog(level, message))
-
-            if (persist) {
-                persistLog(level, message)
-            }
+            val log = formatLog(level, message)
+            textViewLog.append(log)
+            currentSessionLogs.add(log)
+            persistLog(level, message)
 
             // scroll after delay, because textView has to be updated first
             Handler(Looper.getMainLooper()).postDelayed({
