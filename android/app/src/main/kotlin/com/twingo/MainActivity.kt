@@ -29,12 +29,13 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
-import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
+import androidx.core.graphics.set
 import com.google.android.material.textfield.TextInputLayout
 import com.twingo.lib.AppLog
 import com.twingo.lib.LogLevel
@@ -43,6 +44,7 @@ import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.random.Random
 
 private const val CURRENT_SESSION = "current"
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
@@ -54,8 +56,6 @@ class MainActivity : AppCompatActivity() {
     private var activityResultHandlers = mutableMapOf<Int, (Int) -> Unit>()
     private val broadcastReceiver = Receiver()
     private var currentSessionLogs = mutableListOf<AppLog>()
-    private val editTextCurrentMusicCharacteristic: EditText
-        get() = findViewById(R.id.edit_current_music)
     private val grayscaleMusicCover: ImageView
         get() = findViewById(R.id.image_grayscale_music_cover)
     private var logLevel = LogLevel.DEBUG
@@ -102,7 +102,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } else if (intent.action == Synchronizer.INTENT_NOTIFICATION_CANCELED) {
                 finish()
-            } else if (intent.action == Synchronizer.INTENT_NOTIFICATION_CLICKED) {
+            } else if (intent.action == Synchronizer.INTENT_NOTIFICATION_ACTION_RESTART) {
                 synchronizer?.restartGattServer()
             } else if (intent.action == Synchronizer.INTENT_STATE) {
                 val state = intent.getStringExtra(Synchronizer.INTENT_STATE_STATE)
@@ -217,7 +217,7 @@ class MainActivity : AppCompatActivity() {
             intentFilter.addAction(Synchronizer.INTENT_BITMAPS)
             intentFilter.addAction(Synchronizer.INTENT_LOG)
             intentFilter.addAction(Synchronizer.INTENT_NOTIFICATION_CANCELED)
-            intentFilter.addAction(Synchronizer.INTENT_NOTIFICATION_CLICKED)
+            intentFilter.addAction(Synchronizer.INTENT_NOTIFICATION_ACTION_RESTART)
             intentFilter.addAction(Synchronizer.INTENT_STATE)
 
             this.registerReceiver(broadcastReceiver, intentFilter, RECEIVER_EXPORTED)
@@ -240,14 +240,12 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(broadcastReceiver)
     }
 
-    fun onTapSend(view: View) {
-        val synchronizer = synchronizer
-
-        if (synchronizer != null) {
-            val text = editTextCurrentMusicCharacteristic.text.toString()
-            val data = text.toByteArray(Charsets.UTF_8)
-            synchronizer.sendNotification(Synchronizer.UUID_CHARACTERISTIC_CURRENT_MUSIC, data)
-        }
+    override fun onNewIntent(intent: Intent?) {
+        log("onNewIntent")
+        super.onNewIntent(intent)
+        overrideActivityTransition(
+            OVERRIDE_TRANSITION_OPEN, android.R.anim.fade_in, android.R.anim.fade_out
+        )
     }
 
     override fun onRequestPermissionsResult(
@@ -264,9 +262,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun onTapClearLog(view: View) {
+    fun onClickSendMusic(view: View) {
+        val synchronizer = synchronizer
+
+        if (synchronizer != null) {
+            val coverSize = 64
+            val grayscaleDataBytes = ByteArray(coverSize * coverSize)
+            val grayscaleBitmap = createBitmap(coverSize, coverSize, Bitmap.Config.ARGB_8888)
+
+            for (index in grayscaleDataBytes.indices) {
+                val value = Random.nextInt(0, 256)
+                grayscaleDataBytes[index] = value.toByte()
+                grayscaleBitmap[index % coverSize, index / coverSize] =
+                    (255 and 0xff) shl 24 or (value and 0xff) shl 16 or (value and 0xff) shl 8 or (value and 0xff)
+            }
+
+            synchronizer.sendNotification(
+                Synchronizer.UUID_CHARACTERISTIC_CURRENT_MUSIC,
+                "Music title\nArtist".toByteArray(Charsets.UTF_8)
+            )
+            synchronizer.sendNotification(
+                Synchronizer.UUID_CHARACTERISTIC_MUSIC_COVER,
+                grayscaleDataBytes,
+                true
+            )
+            runOnUiThread {
+                musicCover.setImageBitmap(grayscaleBitmap.scale(128, 128))
+                grayscaleMusicCover.setImageBitmap(grayscaleBitmap.scale(128, 128))
+            }
+        }
+    }
+
+    fun onClickClear(view: View) {
         textViewLog.text = ""
-        log("Logs cleared")
+    }
+
+    fun onClickRestart(view: View) {
+        synchronizer?.restartGattServer()
     }
 
     private fun appendLog(log: AppLog) {

@@ -51,7 +51,8 @@ class Synchronizer : Service() {
         const val INTENT_LOG_LEVEL = "Twingo.Synchronizer.LOG_IMPORTANT"
         const val INTENT_LOG_MESSAGE = "Twingo.Synchronizer.LOG_MESSAGE"
         const val INTENT_NOTIFICATION_CANCELED = "Twingo.Synchronizer.NOTIFICATION_CANCELED"
-        const val INTENT_NOTIFICATION_CLICKED = "Twingo.Synchronizer.NOTIFICATION_CLICKED"
+        const val INTENT_NOTIFICATION_ACTION_RESTART =
+            "Twingo.Synchronizer.NOTIFICATION_ACTION_RESTART"
         const val INTENT_STATE = "Twingo.Synchronizer.STATE"
         const val INTENT_STATE_STATE = "Twingo.Synchronizer.STATE_STATE"
         const val STATE_CENTRAL_CONNECTED = "CENTRAL_CONNECTED"
@@ -195,22 +196,31 @@ class Synchronizer : Service() {
         }
 
         val cancelIntent = Intent(this, BroadcastForwarder::class.java)
-        val clickIntent = Intent(this, BroadcastForwarder::class.java)
+        val clickIntent = Intent(this, MainActivity::class.java)
+        val restartIntent = Intent(this, BroadcastForwarder::class.java)
 
         cancelIntent.action = INTENT_NOTIFICATION_CANCELED
-        clickIntent.action = INTENT_NOTIFICATION_CLICKED
+        restartIntent.action = INTENT_NOTIFICATION_ACTION_RESTART
 
         val cancelPendingIntent =
             PendingIntent.getBroadcast(this, 0, cancelIntent, PendingIntent.FLAG_IMMUTABLE)
 
         val clickPendingIntent =
-            PendingIntent.getBroadcast(this, 0, clickIntent, PendingIntent.FLAG_IMMUTABLE)
+            PendingIntent.getActivity(baseContext, 0, clickIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        val restartPendingIntent =
+            PendingIntent.getBroadcast(this, 0, restartIntent, PendingIntent.FLAG_IMMUTABLE)
 
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_launcher_round)
             .setContentTitle("Twingo")
             .setContentText("Foreground service running")
+            .addAction(
+                R.mipmap.ic_launcher_round,
+                getString(R.string.button_restart),
+                restartPendingIntent
+            )
             .setContentIntent(clickPendingIntent)
             .setDeleteIntent(cancelPendingIntent)
             .build()
