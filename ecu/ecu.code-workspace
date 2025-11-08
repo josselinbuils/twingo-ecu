@@ -55,7 +55,11 @@
 			"syscfg.h": "c",
 			"nimble_npl.h": "c",
 			"cmath": "c",
-			"complex": "c"
+			"complex": "c",
+			"math.h": "c",
+			"cstring": "c",
+			"locale": "c",
+			"ui.h": "c"
 		}
 	}
 }
