@@ -282,6 +282,7 @@ class Synchronizer : Service() {
         appendLog("Restart GATT server", Log.INFO)
         handler?.removeCallbacks(restartGattServerTask)
         unregisterMediaController()
+        stopAdvertising()
         stopGattServer()
         startGattServer()
         startAdvertising()
