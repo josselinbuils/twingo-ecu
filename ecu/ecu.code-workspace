@@ -31,7 +31,6 @@
 			"task.h": "c",
 			"lv_demo_music.h": "c",
 			"queue.h": "c",
-			"waveshare_twai_port.h": "c",
 			"lcd.h": "c",
 			"esp_lvgl_port.h": "c",
 			"esp_idf_version.h": "c",

@@ -2,7 +2,6 @@
 #include "esp_lvgl_port.h"
 #include "lcd.h"
 #include "twingo_logo.c"
-#include "external/waveshare_twai_port.h"
 #include <driver/i2c.h>
 #include <lvgl.h>
 #include <math.h>
@@ -404,7 +403,5 @@ void app_main() {
     } else {
       ESP_LOGI(TAG, "Master read slave error, IO not connected...\n");
     }
-
-    // ESP_ERROR_CHECK(waveshare_twai_receive());
   }
 }
