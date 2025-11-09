@@ -43,20 +43,21 @@ void read_rpm() {
 }
 
 void app_main() {
-  ESP_LOGI(TAG, "Initialize LCD panel");
-  ESP_ERROR_CHECK(lcd_init());
-
   ESP_LOGI(TAG, "Initialize I2C");
   ESP_ERROR_CHECK(i2c_init());
+
+  // lcd_backlight_off();
 
   ESP_LOGI(TAG, "Initialize GPIO");
   gpio_init();
 
-  ESP_LOGI(TAG, "Initialize touch");
-  ESP_ERROR_CHECK(touch_init());
+  ESP_LOGI(TAG, "Initialize LCD");
+  ESP_ERROR_CHECK(lcd_init());
 
   ESP_LOGI(TAG, "Initialize UI");
   ui_init(handle_twingo_click);
+
+  // lcd_backlight_on();
 
   ESP_LOGI(TAG, "Initialize BLE");
   ble_init(ui_set_bluetooth_state, ui_set_current_music, ui_set_music_cover);

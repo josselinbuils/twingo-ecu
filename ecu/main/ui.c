@@ -30,10 +30,10 @@ lv_obj_t *music_title_label;
 char music_artist[100];
 char music_title[100];
 
-esp_err_t ui_lvgl_init(void);
+esp_err_t ui_init_lvgl(void);
 
 void ui_init(lv_event_cb_t twingo_click_callback) {
-  ui_lvgl_init();
+  ui_init_lvgl();
 
   vTaskDelay(1); // Prevent LVGL slow boot
 
@@ -248,7 +248,7 @@ void ui_init(lv_event_cb_t twingo_click_callback) {
   }
 }
 
-esp_err_t ui_lvgl_init(void) {
+esp_err_t ui_init_lvgl(void) {
   const lvgl_port_cfg_t lvgl_cfg = {
     .task_priority = 4, /* LVGL task priority */
     .task_stack = 6144, /* LVGL task stack size */

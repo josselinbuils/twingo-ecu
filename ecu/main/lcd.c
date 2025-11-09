@@ -5,6 +5,9 @@
 esp_lcd_panel_handle_t lcd_panel = NULL;
 esp_lcd_touch_handle_t touch_handle = NULL;
 
+esp_err_t touch_init(void);
+void touch_reset(void);
+
 void gpio_init(void) {
   // Zero-initialize the config structure
   gpio_config_t io_conf = {};
@@ -21,17 +24,6 @@ void gpio_init(void) {
   gpio_config(&io_conf);
 }
 
-esp_err_t lcd_backlight_on() {
-  // Configure CH422G to output mode
-  uint8_t write_buf = 0x01;
-  i2c_master_write_to_device(I2C_NUM, 0x24, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
-
-  // Pull the backlight pin high to light the screen backlight
-  write_buf = 0x1E;
-  i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
-  return ESP_OK;
-}
-
 esp_err_t lcd_backlight_off() {
   // Configure CH422G to output mode
   uint8_t write_buf = 0x01;
@@ -39,6 +31,17 @@ esp_err_t lcd_backlight_off() {
 
   // Turn off the screen backlight by pulling the backlight pin low
   write_buf = 0x1A;
+  i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
+  return ESP_OK;
+}
+
+esp_err_t lcd_backlight_on() {
+  // Configure CH422G to output mode
+  uint8_t write_buf = 0x01;
+  i2c_master_write_to_device(I2C_NUM, 0x24, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
+
+  // Pull the backlight pin high to light the screen backlight
+  write_buf = 0x1E;
   i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
   return ESP_OK;
 }
@@ -104,28 +107,13 @@ esp_err_t lcd_init(void) {
   ESP_GOTO_ON_ERROR(esp_lcd_new_rgb_panel(&panel_conf, &lcd_panel), err, TAG, "RGB init failed");
   ESP_GOTO_ON_ERROR(esp_lcd_panel_init(lcd_panel), err, TAG, "LCD init failed");
 
-  return ret;
+  return touch_init();
 
 err:
   if (lcd_panel) {
     esp_lcd_panel_del(lcd_panel);
   }
   return ret;
-}
-
-void touch_reset(void) {
-  uint8_t write_buf = 0x01;
-  i2c_master_write_to_device(I2C_NUM, 0x24, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
-
-  // Reset the touch screen. It is recommended to reset the touch screen before using it.
-  write_buf = 0x2C;
-  i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
-  esp_rom_delay_us(100 * 1000);
-  gpio_set_level(GPIO_INPUT_IO_4, 0);
-  esp_rom_delay_us(100 * 1000);
-  write_buf = 0x2E;
-  i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
-  esp_rom_delay_us(200 * 1000);
 }
 
 // To debug, add ESP_LOGD(TAG, "Touch position: %u,%u", touchpad_x[0], touchpad_y[0]); to
@@ -158,4 +146,19 @@ esp_err_t touch_init(void) {
   };
 
   return esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, &touch_handle);
+}
+
+void touch_reset(void) {
+  uint8_t write_buf = 0x01;
+  i2c_master_write_to_device(I2C_NUM, 0x24, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
+
+  // Reset the touch screen. It is recommended to reset the touch screen before using it.
+  write_buf = 0x2C;
+  i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
+  esp_rom_delay_us(100 * 1000);
+  gpio_set_level(GPIO_INPUT_IO_4, 0);
+  esp_rom_delay_us(100 * 1000);
+  write_buf = 0x2E;
+  i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
+  esp_rom_delay_us(200 * 1000);
 }

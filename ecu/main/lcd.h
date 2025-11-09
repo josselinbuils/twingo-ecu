@@ -64,6 +64,5 @@ esp_err_t lcd_init();
 esp_err_t lcd_backlight_on();
 esp_err_t lcd_backlight_off();
 esp_err_t lvgl_init();
-esp_err_t touch_init();
 
 #endif
