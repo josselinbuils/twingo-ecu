@@ -41,8 +41,8 @@ uint8_t music_cover_map[4096];
 u_int16_t peer_connection_handle = 0;
 
 void (*set_bluetooth_state_callback)(bool enabled);
-void (*set_current_music_callback)(const char *current_music);
-void (*set_music_cover_callback)(const uint8_t *music_cover_map);
+void (*set_current_music_callback)(char *current_music);
+void (*set_music_cover_callback)(uint8_t *music_cover_map);
 
 int check_ble_connection() {
   if (peer_connection_handle == 0) {
@@ -131,9 +131,9 @@ void host_task(void *param) {
 }
 
 void init_ble(
-  void (*bluetooth_state_callback)(),
-  void (*current_music_callback)(),
-  void (*music_cover_callback)()
+  void (*bluetooth_state_callback)(bool enabled),
+  void (*current_music_callback)(char *current_music),
+  void (*music_cover_callback)(uint8_t *music_cover_map)
 ) {
   // Initialize NVS — it is used to store PHY calibration data
   esp_err_t ret = nvs_flash_init();

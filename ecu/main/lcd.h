@@ -66,9 +66,6 @@
 #define LCD_GPIO_DATA14 (GPIO_NUM_41)
 #define LCD_GPIO_DATA15 (GPIO_NUM_40)
 
-#define LCD_BK_LIGHT_ON_LEVEL (1)
-#define LCD_BK_LIGHT_OFF_LEVEL !LCD_BK_LIGHT_ON_LEVEL
-
 void gpio_init();
 esp_err_t i2c_init();
 esp_err_t lcd_init();

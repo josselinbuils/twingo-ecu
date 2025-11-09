@@ -35,9 +35,9 @@ union ble_store_key;
 
 int check_ble_connection();
 void init_ble(
-  void (*bluetooth_state_callback)(),
-  void (*current_music_callback)(),
-  void (*music_cover_callback)()
+  void (*bluetooth_state_callback)(bool enabled),
+  void (*current_music_callback)(char *current_music),
+  void (*music_cover_callback)(uint8_t *music_cover_map)
 );
 
 #ifdef __cplusplus

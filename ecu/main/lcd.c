@@ -215,16 +215,16 @@ void touch_reset(void) {
   esp_rom_delay_us(200 * 1000);
 }
 
+// To debug, add ESP_LOGD(TAG, "Touch position: %u,%u", touchpad_x[0], touchpad_y[0]); to
+// esp_lvgl_port_touch/c -> lvgl_port_touchpad_read (line 134).
 esp_err_t touch_init(void) {
   touch_reset();
 
   esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-  esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
+  const esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
 
-  ESP_RETURN_ON_ERROR(
-    esp_lcd_new_panel_io_i2c((esp_lcd_i2c_bus_handle_t)I2C_NUM, &tp_io_config, &tp_io_handle),
-    TAG,
-    ""
+  ESP_ERROR_CHECK(
+    esp_lcd_new_panel_io_i2c((esp_lcd_i2c_bus_handle_t)I2C_NUM, &tp_io_config, &tp_io_handle)
   );
 
   const esp_lcd_touch_config_t tp_cfg = {

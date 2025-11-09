@@ -17,6 +17,7 @@ const int TICK_WIDTH = 2;
 
 lv_obj_t *bluetooth_label;
 lv_obj_t *cover_img;
+lv_obj_t *logo_img;
 lv_obj_t *indic;
 lv_obj_t *music_artist_label;
 lv_obj_t *music_title_label;
@@ -24,7 +25,7 @@ lv_obj_t *music_title_label;
 char music_artist[100];
 char music_title[100];
 
-void init_ui() {
+void init_ui(lv_event_cb_t twingo_click_callback) {
   if (lvgl_port_lock(-1)) {
     lv_obj_set_style_bg_color(lv_screen_active(), BACKGROUND_COLOR, LV_PART_MAIN);
     lv_obj_clear_flag(lv_screen_active(), LV_OBJ_FLAG_SCROLLABLE);
@@ -87,8 +88,6 @@ void init_ui() {
     lv_obj_add_style(outer_scale, &main_line_style, LV_PART_MAIN);
 
     // Inner scale
-
-    // lv_obj_add_event(inner_scale, click_handler, LV_EVENT_CLICKED, NULL);
 
     lv_scale_set_range(inner_scale, 0, INDICATOR_RANGE);
     lv_scale_set_total_tick_count(inner_scale, 151);
@@ -184,12 +183,14 @@ void init_ui() {
     // Add twingo logo
 
     LV_IMG_DECLARE(twingo_logo)
-    lv_obj_t *logo_img = lv_img_create(inner_scale);
+    logo_img = lv_imagebutton_create(inner_scale);
 
-    lv_img_set_src(logo_img, &twingo_logo);
+    lv_imagebutton_set_src(logo_img, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &twingo_logo, NULL);
     lv_obj_set_style_img_recolor_opa(logo_img, LV_OPA_100, 0);
     lv_obj_set_style_img_recolor(logo_img, COLOR, 0);
     lv_obj_align(logo_img, LV_ALIGN_CENTER, 0, -170);
+    lv_obj_remove_flag(logo_img, LV_OBJ_FLAG_PRESS_LOCK);
+    lv_obj_add_event_cb(logo_img, twingo_click_callback, LV_EVENT_ALL, NULL);
 
     // Add current music
 
@@ -263,7 +264,7 @@ void set_current_music(char *current_music) {
   }
 }
 
-void set_music_cover(uint8_t *music_cover_map_src) {
+void set_music_cover(uint8_t *music_cover_map) {
   ESP_LOGI(TAG, "Set current music: %s - %s", music_artist, music_title);
 
   const lv_draw_buf_t music_cover = {
@@ -278,7 +279,7 @@ void set_music_cover(uint8_t *music_cover_map_src) {
         .reserved_2 = 0,
       },
     .data_size = 4096,
-    .data = music_cover_map_src
+    .data = music_cover_map
   };
 
   lv_point_t label_size;

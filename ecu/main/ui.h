@@ -8,7 +8,7 @@
 #define COLOR lv_color_hex(0xa4b700)
 #define DEVELOP 0
 
-void init_ui();
+void init_ui(void (*twingo_click_callback)());
 void set_bluetooth_state(bool enabled);
 void set_current_music(char *current_music);
 void set_music_cover(uint8_t *music_cover_map_src);

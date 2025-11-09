@@ -13,13 +13,17 @@ const int RPM_READ_PERIOD_MS = 100;
 
 bool is_backlight_on = true;
 
-void click_handler(lv_event_t *event) {
-  if (is_backlight_on) {
-    lcd_backlight_on();
-  } else {
-    lcd_backlight_off();
-  }
-  is_backlight_on = !is_backlight_on;
+void handle_twingo_click(lv_event_t *event) {
+  lv_event_code_t code = lv_event_get_code(event);
+
+  ESP_LOGI(TAG, "Twingo event: %d", code);
+
+  // if (is_backlight_on) {
+  //   lcd_backlight_on();
+  // } else {
+  //   lcd_backlight_off();
+  // }
+  // is_backlight_on = !is_backlight_on;
 }
 
 void read_rpm() {
@@ -57,7 +61,7 @@ void app_main() {
   vTaskDelay(1); // Prevent LVGL slow boot
 
   ESP_LOGI(TAG, "Initialize UI");
-  init_ui();
+  init_ui(handle_twingo_click);
 
   ESP_LOGI(TAG, "Initialize BLE");
   init_ble(set_bluetooth_state, set_current_music, set_music_cover);
