@@ -13,17 +13,13 @@ const int RPM_READ_PERIOD_MS = 100;
 
 bool is_backlight_on = true;
 
-void handle_twingo_click(lv_event_t *event) {
-  lv_event_code_t code = lv_event_get_code(event);
-
-  ESP_LOGI(TAG, "Twingo event: %d", code);
-
-  // if (is_backlight_on) {
-  //   lcd_backlight_on();
-  // } else {
-  //   lcd_backlight_off();
-  // }
-  // is_backlight_on = !is_backlight_on;
+void handle_twingo_click() {
+  if (is_backlight_on) {
+    lcd_backlight_on();
+  } else {
+    lcd_backlight_off();
+  }
+  is_backlight_on = !is_backlight_on;
 }
 
 void read_rpm() {
@@ -46,8 +42,6 @@ void app_main() {
   ESP_LOGI(TAG, "Initialize I2C");
   ESP_ERROR_CHECK(i2c_init());
 
-  // lcd_backlight_off();
-
   ESP_LOGI(TAG, "Initialize GPIO");
   gpio_init();
 
@@ -55,9 +49,10 @@ void app_main() {
   ESP_ERROR_CHECK(lcd_init());
 
   ESP_LOGI(TAG, "Initialize UI");
+  lcd_backlight_off();
   ui_init(handle_twingo_click);
-
-  // lcd_backlight_on();
+  vTaskDelay(200 / portTICK_PERIOD_MS);
+  lcd_backlight_on();
 
   ESP_LOGI(TAG, "Initialize BLE");
   ble_init(ui_set_bluetooth_state, ui_set_current_music, ui_set_music_cover);

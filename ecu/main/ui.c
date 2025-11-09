@@ -23,7 +23,7 @@ lv_indev_t *lvgl_touch_indev = NULL;
 lv_obj_t *bluetooth_label;
 lv_obj_t *cover_img;
 lv_obj_t *indic;
-lv_obj_t *logo_img;
+lv_obj_t *logo_button;
 lv_obj_t *music_artist_label;
 lv_obj_t *music_title_label;
 
@@ -193,15 +193,14 @@ void ui_init(lv_event_cb_t twingo_click_callback) {
 
     // Add twingo logo
 
-    LV_IMG_DECLARE(twingo_logo)
-    logo_img = lv_imagebutton_create(inner_scale);
+    logo_button = lv_imagebutton_create(lv_screen_active());
 
-    lv_imagebutton_set_src(logo_img, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &twingo_logo, NULL);
-    lv_obj_set_style_img_recolor_opa(logo_img, LV_OPA_100, 0);
-    lv_obj_set_style_img_recolor(logo_img, COLOR, 0);
-    lv_obj_align(logo_img, LV_ALIGN_CENTER, 0, -170);
-    lv_obj_remove_flag(logo_img, LV_OBJ_FLAG_PRESS_LOCK);
-    lv_obj_add_event_cb(logo_img, twingo_click_callback, LV_EVENT_ALL, NULL);
+    LV_IMG_DECLARE(twingo_logo)
+    lv_imagebutton_set_src(logo_button, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &twingo_logo, NULL);
+    lv_obj_set_style_image_recolor_opa(logo_button, LV_OPA_100, 0);
+    lv_obj_set_style_image_recolor(logo_button, COLOR, 0);
+    lv_obj_align(logo_button, LV_ALIGN_CENTER, 0, 50);
+    lv_obj_add_event_cb(logo_button, twingo_click_callback, LV_EVENT_CLICKED, NULL);
 
     // Add current music
 
@@ -248,6 +247,8 @@ void ui_init(lv_event_cb_t twingo_click_callback) {
   }
 }
 
+// To debug touch, add ESP_LOGD(TAG, "Touch position: %u,%u", touchpad_x[0], touchpad_y[0]);
+// to esp_lvgl_port_touch.c -> lvgl_port_touchpad_read (line 134).
 esp_err_t ui_init_lvgl(void) {
   const lvgl_port_cfg_t lvgl_cfg = {
     .task_priority = 4, /* LVGL task priority */

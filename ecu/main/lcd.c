@@ -116,8 +116,6 @@ err:
   return ret;
 }
 
-// To debug, add ESP_LOGD(TAG, "Touch position: %u,%u", touchpad_x[0], touchpad_y[0]); to
-// esp_lvgl_port_touch/c -> lvgl_port_touchpad_read (line 134).
 esp_err_t touch_init(void) {
   touch_reset();
 
