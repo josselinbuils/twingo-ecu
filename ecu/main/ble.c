@@ -1,24 +1,16 @@
 #include "ble.h"
-#include "esp_log.h"
-#include "nvs_flash.h"
-#include "console/console.h"
-#include "host/ble_hs.h"
-#include "host/util/util.h"
-#include "nimble/nimble_port.h"
-#include "nimble/nimble_port_freertos.h"
-#include "services/gap/ble_svc_gap.h"
 
 #define TAG "BLE"
 
 void ble_store_config_init(void);
-static int on_gap_event(struct ble_gap_event *event, void *arg);
-static int on_read_ping(
+static int ble_on_gap_event(struct ble_gap_event *event, void *arg);
+static int ble_on_read_ping(
   uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
 );
 static void on_reset(int reason);
 static void on_sync(void);
-static void scan(void);
-static int should_connect(const struct ble_gap_disc_desc *disc);
+static void ble_scan(void);
+static int ble_should_connect(const struct ble_gap_disc_desc *disc);
 
 static const ble_uuid_t *remote_svc_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x50, 0x46, 0x39, 0x39,
@@ -44,7 +36,7 @@ void (*set_bluetooth_state_callback)(bool enabled);
 void (*set_current_music_callback)(char *current_music);
 void (*set_music_cover_callback)(uint8_t *music_cover_map);
 
-int check_ble_connection() {
+int ble_check_connection() {
   if (peer_connection_handle == 0) {
     return 0;
   }
@@ -63,7 +55,7 @@ int check_ble_connection() {
     return 0;
   }
 
-  int rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, on_read_ping, NULL);
+  int rc = ble_gattc_read(peer->conn_handle, chr->chr.val_handle, ble_on_read_ping, NULL);
 
   if (rc != 0) {
     ESP_LOGE(TAG, "Failed to read ping characteristic; rc=%d\n", rc);
@@ -76,13 +68,13 @@ error:
   return 1;
 }
 
-static void connect_if_interesting(void *disc) {
+static void ble_connect_if_interesting(void *disc) {
   uint8_t own_addr_type;
   int rc;
   ble_addr_t *addr;
 
   // Don't do anything if we don't care about this advertiser
-  if (!should_connect((struct ble_gap_disc_desc *)disc)) {
+  if (!ble_should_connect((struct ble_gap_disc_desc *)disc)) {
     return;
   }
 
@@ -109,7 +101,7 @@ static void connect_if_interesting(void *disc) {
    */
   addr = &((struct ble_gap_disc_desc *)disc)->addr;
 
-  rc = ble_gap_connect(own_addr_type, addr, 30000, NULL, on_gap_event, NULL);
+  rc = ble_gap_connect(own_addr_type, addr, 30000, NULL, ble_on_gap_event, NULL);
 
   if (rc != 0) {
     ESP_LOGE(
@@ -123,14 +115,14 @@ static void connect_if_interesting(void *disc) {
   }
 }
 
-void host_task(void *param) {
+void ble_host_task(void *param) {
   ESP_LOGI(TAG, "BLE Host Task Started");
   // This function will return only when nimble_port_stop() is executed
   nimble_port_run();
   nimble_port_freertos_deinit();
 }
 
-void init_ble(
+void ble_init(
   void (*bluetooth_state_callback)(bool enabled),
   void (*current_music_callback)(char *current_music),
   void (*music_cover_callback)(uint8_t *music_cover_map)
@@ -165,13 +157,13 @@ void init_ble(
   assert(rc == 0);
 
   ble_store_config_init();
-  nimble_port_freertos_init(host_task);
+  nimble_port_freertos_init(ble_host_task);
 }
 
 /**
  * Called when service discovery of the specified peer has completed.
  */
-static void on_disc_complete(const struct peer *peer, int status, void *arg) {
+static void ble_on_disc_complete(const struct peer *peer, int status, void *arg) {
   if (status != 0) {
     ESP_LOGE(TAG, "Service discovery failed; status=%d conn_handle=%d", status, peer->conn_handle);
     ble_gap_terminate(peer->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
@@ -191,7 +183,7 @@ static void on_disc_complete(const struct peer *peer, int status, void *arg) {
   }
 }
 
-static int on_gap_event(struct ble_gap_event *event, void *arg) {
+static int ble_on_gap_event(struct ble_gap_event *event, void *arg) {
   struct ble_gap_conn_desc desc;
   struct ble_hs_adv_fields fields;
   int rc;
@@ -206,7 +198,7 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       // An advertisement report was received during GAP discovery
       print_adv_fields(&fields);
 
-      connect_if_interesting(&event->disc);
+      ble_connect_if_interesting(&event->disc);
       return 0;
 
     case BLE_GAP_EVENT_CONNECT:
@@ -231,7 +223,7 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
         }
 
         // Perform service discovery
-        rc = peer_disc_all(event->connect.conn_handle, on_disc_complete, NULL);
+        rc = peer_disc_all(event->connect.conn_handle, ble_on_disc_complete, NULL);
         if (rc != 0) {
           ESP_LOGE(TAG, "Failed to discover services; rc=%d", rc);
           return 0;
@@ -239,7 +231,7 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       } else {
         // Connection attempt failed; resume scanning
         ESP_LOGE(TAG, "Connection failed; status=%d", event->connect.status);
-        scan();
+        ble_scan();
       }
 
       return 0;
@@ -255,7 +247,7 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       (*set_bluetooth_state_callback)(false);
 
       // Resume scanning
-      scan();
+      ble_scan();
       return 0;
 
     case BLE_GAP_EVENT_DISC_COMPLETE:
@@ -356,7 +348,7 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
   }
 }
 
-static int on_read_ping(
+static int ble_on_read_ping(
   uint16_t conn_handle, const struct ble_gatt_error *error, struct ble_gatt_attr *attr, void *arg
 ) {
   ESP_LOGI(TAG, "Ping read complete; status=%d conn_handle=%d", error->status, conn_handle);
@@ -381,13 +373,13 @@ static void on_sync(void) {
   assert(rc == 0);
 
   // Begin scanning for a peripheral to connect to
-  scan();
+  ble_scan();
 }
 
 /**
  * Initiates the GAP general discovery procedure.
  */
-static void scan(void) {
+static void ble_scan(void) {
   uint8_t own_addr_type;
   struct ble_gap_disc_params disc_params = {0};
   int rc;
@@ -416,7 +408,7 @@ static void scan(void) {
   disc_params.filter_policy = 0;
   disc_params.limited = 0;
 
-  rc = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &disc_params, on_gap_event, NULL);
+  rc = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &disc_params, ble_on_gap_event, NULL);
   if (rc != 0) {
     ESP_LOGE(TAG, "Error initiating GAP discovery procedure; rc=%d", rc);
   }
@@ -427,7 +419,7 @@ static void scan(void) {
  * advertisement.  The function returns a positive result if the device
  * advertises connectability and support for the Alert Notification service.
  */
-static int should_connect(const struct ble_gap_disc_desc *disc) {
+static int ble_should_connect(const struct ble_gap_disc_desc *disc) {
   struct ble_hs_adv_fields fields;
   int rc;
   int i;

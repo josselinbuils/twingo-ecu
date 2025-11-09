@@ -2,11 +2,8 @@
 
 #define TAG "LCD"
 
-static esp_lcd_panel_handle_t lcd_panel = NULL;
-static esp_lcd_touch_handle_t touch_handle = NULL;
-
-static lv_display_t *lvgl_disp = NULL;
-static lv_indev_t *lvgl_touch_indev = NULL;
+esp_lcd_panel_handle_t lcd_panel = NULL;
+esp_lcd_touch_handle_t touch_handle = NULL;
 
 void gpio_init(void) {
   // Zero-initialize the config structure
@@ -44,23 +41,6 @@ esp_err_t lcd_backlight_off() {
   write_buf = 0x1A;
   i2c_master_write_to_device(I2C_NUM, 0x38, &write_buf, 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
   return ESP_OK;
-}
-
-esp_err_t i2c_init(void) {
-  int i2c_master_port = I2C_NUM;
-
-  i2c_config_t i2c_conf = {
-    .mode = I2C_MODE_MASTER,
-    .sda_io_num = I2C_SDA_PIN,
-    .scl_io_num = I2C_SCL_PIN,
-    .sda_pullup_en = GPIO_PULLUP_ENABLE,
-    .scl_pullup_en = GPIO_PULLUP_ENABLE,
-    .master.clk_speed = I2C_FREQ_HZ,
-  };
-
-  i2c_param_config(i2c_master_port, &i2c_conf);
-
-  return i2c_driver_install(i2c_master_port, i2c_conf.mode, 0, 0, 0);
 }
 
 esp_err_t lcd_init(void) {
@@ -131,73 +111,6 @@ err:
     esp_lcd_panel_del(lcd_panel);
   }
   return ret;
-}
-
-esp_err_t lvgl_init(void) {
-  const lvgl_port_cfg_t lvgl_cfg = {
-    .task_priority = 4, /* LVGL task priority */
-    .task_stack = 6144, /* LVGL task stack size */
-    .task_affinity = -1, /* LVGL task pinned to core (-1 is no affinity) */
-    .task_max_sleep_ms = 500, /* Maximum sleep in LVGL task */
-    .timer_period_ms = 2 /* LVGL timer tick period in ms */
-  };
-  ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_cfg), TAG, "LVGL port initialization failed");
-
-  uint32_t buff_size = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT;
-#if LCD_LVGL_FULL_REFRESH || LCD_LVGL_DIRECT_MODE
-  buff_size = LCD_H_RES * LCD_V_RES;
-#endif
-
-  /* Add LCD screen */
-  const lvgl_port_display_cfg_t disp_cfg = {
-    .panel_handle = lcd_panel,
-    .buffer_size = buff_size,
-    .double_buffer = LCD_DRAW_BUFF_DOUBLE,
-    .hres = LCD_H_RES,
-    .vres = LCD_V_RES,
-    .monochrome = false,
-    .color_format = LV_COLOR_FORMAT_RGB565,
-    .rotation =
-      {
-        .swap_xy = false,
-        .mirror_x = false,
-        .mirror_y = false,
-      },
-    .flags = {
-      .buff_dma = false,
-      .buff_spiram = false,
-#if LCD_LVGL_FULL_REFRESH
-      .full_refresh = true,
-#elif LCD_LVGL_DIRECT_MODE
-      .direct_mode = true,
-#endif
-      .swap_bytes = false,
-    }
-  };
-  const lvgl_port_display_rgb_cfg_t rgb_cfg = {
-    .flags = {
-#if LCD_RGB_BOUNCE_BUFFER_MODE
-      .bb_mode = true,
-#else
-      .bb_mode = false,
-#endif
-#if LCD_LVGL_AVOID_TEAR
-      .avoid_tearing = true,
-#else
-      .avoid_tearing = false,
-#endif
-    }
-  };
-  lvgl_disp = lvgl_port_add_disp_rgb(&disp_cfg, &rgb_cfg);
-
-  /* Add touch input (for selected screen) */
-  const lvgl_port_touch_cfg_t touch_cfg = {
-    .disp = lvgl_disp,
-    .handle = touch_handle,
-  };
-  lvgl_touch_indev = lvgl_port_add_touch(&touch_cfg);
-
-  return ESP_OK;
 }
 
 void touch_reset(void) {

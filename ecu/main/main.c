@@ -34,7 +34,7 @@ void read_rpm() {
     ESP_LOGE(TAG, "I2C Timeout");
   } else if (ret == ESP_OK) {
     uint16_t rpm = buffer[0] | (buffer[1] << 8);
-    set_rpm(rpm);
+    ui_set_rpm(rpm);
     // ESP_LOGI(TAG, "rpm: %d", rpm);
   } else {
     ESP_LOGI(TAG, "Master read slave error, IO not connected...");
@@ -55,18 +55,13 @@ void app_main() {
   ESP_LOGI(TAG, "Initialize touch");
   ESP_ERROR_CHECK(touch_init());
 
-  ESP_LOGI(TAG, "Initialize LVGL");
-  ESP_ERROR_CHECK(lvgl_init());
-
-  vTaskDelay(1); // Prevent LVGL slow boot
-
   ESP_LOGI(TAG, "Initialize UI");
-  init_ui(handle_twingo_click);
+  ui_init(handle_twingo_click);
 
   ESP_LOGI(TAG, "Initialize BLE");
-  init_ble(set_bluetooth_state, set_current_music, set_music_cover);
+  ble_init(ui_set_bluetooth_state, ui_set_current_music, ui_set_music_cover);
 
-  if (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
+  if (!i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");
   }
 
@@ -85,7 +80,7 @@ void app_main() {
     if (xTaskCheckForTimeOut(&rpm_timeout, &rpm_ticks) == pdTRUE) {
       if (tachometer_found) {
         read_rpm();
-      } else if (check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
+      } else if (i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
         tachometer_found = true;
         ESP_LOGI(TAG, "Tachometer device found");
       }
@@ -93,7 +88,7 @@ void app_main() {
     }
 
     if (xTaskCheckForTimeOut(&ble_check_timeout, &ble_check_ticks) == pdTRUE) {
-      check_ble_connection();
+      ble_check_connection();
       ble_check_ticks = pdMS_TO_TICKS(BLE_CHECK_PERIOD_MS);
     }
   }

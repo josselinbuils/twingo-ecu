@@ -2,7 +2,7 @@
 
 #define TAG "I2C"
 
-bool check_i2c_device(i2c_port_t port, uint8_t address) {
+bool i2c_check_device(i2c_port_t port, uint8_t address) {
   esp_err_t ret;
 
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
@@ -20,6 +20,23 @@ bool check_i2c_device(i2c_port_t port, uint8_t address) {
     ESP_LOGE(TAG, "Error at address 0x%02X, error: %s", address, esp_err_to_name(ret));
   }
   return false;
+}
+
+esp_err_t i2c_init(void) {
+  int i2c_master_port = I2C_NUM;
+
+  i2c_config_t i2c_conf = {
+    .mode = I2C_MODE_MASTER,
+    .sda_io_num = I2C_SDA_PIN,
+    .scl_io_num = I2C_SCL_PIN,
+    .sda_pullup_en = GPIO_PULLUP_ENABLE,
+    .scl_pullup_en = GPIO_PULLUP_ENABLE,
+    .master.clk_speed = I2C_FREQ_HZ,
+  };
+
+  i2c_param_config(i2c_master_port, &i2c_conf);
+
+  return i2c_driver_install(i2c_master_port, i2c_conf.mode, 0, 0, 0);
 }
 
 esp_err_t i2c_master_read_slave(i2c_port_t i2c_num, uint8_t *data_rd, size_t size) {

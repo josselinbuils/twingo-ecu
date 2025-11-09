@@ -1,5 +1,5 @@
-#ifndef _LCD_H_
-#define _LCD_H_
+#ifndef LCD_H
+#define LCD_H
 
 #include "esp_check.h"
 #include "esp_err.h"
@@ -7,18 +7,8 @@
 #include "esp_lcd_panel_rgb.h"
 #include "esp_lcd_touch_gt911.h"
 #include "esp_log.h"
-#include "esp_lvgl_port.h"
+#include "i2c.h"
 #include "driver/gpio.h"
-#include "driver/i2c.h"
-
-// I2C settings
-#define I2C_SCL_PIN 9
-#define I2C_SDA_PIN 8
-#define I2C_NUM 0
-#define I2C_FREQ_HZ 400000
-#define I2C_TX_BUF_DISABLE 0
-#define I2C_RX_BUF_DISABLE 0
-#define I2C_TIMEOUT_MS 1000
 
 // GPIO settings
 #define GPIO_INPUT_IO_4 4
@@ -66,8 +56,10 @@
 #define LCD_GPIO_DATA14 (GPIO_NUM_41)
 #define LCD_GPIO_DATA15 (GPIO_NUM_40)
 
+extern esp_lcd_panel_handle_t lcd_panel;
+extern esp_lcd_touch_handle_t touch_handle;
+
 void gpio_init();
-esp_err_t i2c_init();
 esp_err_t lcd_init();
 esp_err_t lcd_backlight_on();
 esp_err_t lcd_backlight_off();

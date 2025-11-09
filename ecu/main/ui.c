@@ -3,6 +3,9 @@
 
 #define TAG "UI"
 
+extern esp_lcd_panel_handle_t lcd_panel;
+extern esp_lcd_touch_handle_t touch_handle;
+
 const int BORDER_WIDTH = 5;
 const int INDICATOR_ANGLE_RANGE = 194;
 const int INDICATOR_RANGE = 6000;
@@ -15,17 +18,25 @@ const int SCALE_SIZE = 980;
 const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
 const int TICK_WIDTH = 2;
 
+lv_display_t *lvgl_disp = NULL;
+lv_indev_t *lvgl_touch_indev = NULL;
 lv_obj_t *bluetooth_label;
 lv_obj_t *cover_img;
-lv_obj_t *logo_img;
 lv_obj_t *indic;
+lv_obj_t *logo_img;
 lv_obj_t *music_artist_label;
 lv_obj_t *music_title_label;
 
 char music_artist[100];
 char music_title[100];
 
-void init_ui(lv_event_cb_t twingo_click_callback) {
+esp_err_t ui_lvgl_init(void);
+
+void ui_init(lv_event_cb_t twingo_click_callback) {
+  ui_lvgl_init();
+
+  vTaskDelay(1); // Prevent LVGL slow boot
+
   if (lvgl_port_lock(-1)) {
     lv_obj_set_style_bg_color(lv_screen_active(), BACKGROUND_COLOR, LV_PART_MAIN);
     lv_obj_clear_flag(lv_screen_active(), LV_OBJ_FLAG_SCROLLABLE);
@@ -237,19 +248,86 @@ void init_ui(lv_event_cb_t twingo_click_callback) {
   }
 }
 
-void set_bluetooth_state(bool enabled) {
+esp_err_t ui_lvgl_init(void) {
+  const lvgl_port_cfg_t lvgl_cfg = {
+    .task_priority = 4, /* LVGL task priority */
+    .task_stack = 6144, /* LVGL task stack size */
+    .task_affinity = -1, /* LVGL task pinned to core (-1 is no affinity) */
+    .task_max_sleep_ms = 500, /* Maximum sleep in LVGL task */
+    .timer_period_ms = 2 /* LVGL timer tick period in ms */
+  };
+  ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_cfg), TAG, "LVGL port initialization failed");
+
+  uint32_t buff_size = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT;
+#if LCD_LVGL_FULL_REFRESH || LCD_LVGL_DIRECT_MODE
+  buff_size = LCD_H_RES * LCD_V_RES;
+#endif
+
+  /* Add LCD screen */
+  const lvgl_port_display_cfg_t disp_cfg = {
+    .panel_handle = lcd_panel,
+    .buffer_size = buff_size,
+    .double_buffer = LCD_DRAW_BUFF_DOUBLE,
+    .hres = LCD_H_RES,
+    .vres = LCD_V_RES,
+    .monochrome = false,
+    .color_format = LV_COLOR_FORMAT_RGB565,
+    .rotation =
+      {
+        .swap_xy = false,
+        .mirror_x = false,
+        .mirror_y = false,
+      },
+    .flags = {
+      .buff_dma = false,
+      .buff_spiram = false,
+#if LCD_LVGL_FULL_REFRESH
+      .full_refresh = true,
+#elif LCD_LVGL_DIRECT_MODE
+      .direct_mode = true,
+#endif
+      .swap_bytes = false,
+    }
+  };
+  const lvgl_port_display_rgb_cfg_t rgb_cfg = {
+    .flags = {
+#if LCD_RGB_BOUNCE_BUFFER_MODE
+      .bb_mode = true,
+#else
+      .bb_mode = false,
+#endif
+#if LCD_LVGL_AVOID_TEAR
+      .avoid_tearing = true,
+#else
+      .avoid_tearing = false,
+#endif
+    }
+  };
+  lvgl_disp = lvgl_port_add_disp_rgb(&disp_cfg, &rgb_cfg);
+
+  /* Add touch input (for selected screen) */
+  const lvgl_port_touch_cfg_t touch_cfg = {
+    .disp = lvgl_disp,
+    .handle = touch_handle,
+  };
+  lvgl_touch_indev = lvgl_port_add_touch(&touch_cfg);
+
+  return ESP_OK;
+}
+
+void ui_set_bluetooth_state(bool enabled) {
   if (lvgl_port_lock(-1)) {
     if (enabled) {
       lv_label_set_text(bluetooth_label, LV_SYMBOL_BLUETOOTH);
     } else {
       lv_label_set_text(bluetooth_label, "");
-      set_current_music("");
+      ui_set_current_music("");
     }
     lvgl_port_unlock();
   }
 }
 
-void set_current_music(char *current_music) {
+void ui_set_current_music(char *current_music) {
   if (strlen(current_music) > 0) {
     strcpy(music_title, strtok(current_music, "\n"));
     strcpy(music_artist, strtok(NULL, "\n"));
@@ -267,7 +345,7 @@ void set_current_music(char *current_music) {
   }
 }
 
-void set_music_cover(uint8_t *music_cover_map) {
+void ui_set_music_cover(uint8_t *music_cover_map) {
   ESP_LOGI(TAG, "Set current music: %s - %s", music_artist, music_title);
 
   const lv_draw_buf_t music_cover = {
@@ -314,7 +392,7 @@ void set_music_cover(uint8_t *music_cover_map) {
   lvgl_port_unlock();
 }
 
-void set_rpm(uint16_t rpm) {
+void ui_set_rpm(uint16_t rpm) {
   if (lvgl_port_lock(-1)) {
     lv_arc_set_value(indic, rpm);
     lvgl_port_unlock();
