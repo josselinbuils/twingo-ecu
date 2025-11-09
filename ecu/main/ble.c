@@ -178,11 +178,11 @@ static void on_disc_complete(const struct peer *peer, int status, void *arg) {
     return;
   }
 
+  ESP_LOGI(TAG, "Service discovery complete; status=%d conn_handle=%d", status, peer->conn_handle);
+
   peer_connection_handle = peer->conn_handle;
 
   (*set_bluetooth_state_callback)(true);
-
-  ESP_LOGI(TAG, "Service discovery complete; status=%d conn_handle=%d", status, peer->conn_handle);
 
   int rc = ble_gattc_exchange_mtu(peer->conn_handle, NULL, NULL);
 

@@ -238,11 +238,14 @@ void init_ui(lv_event_cb_t twingo_click_callback) {
 }
 
 void set_bluetooth_state(bool enabled) {
-  if (enabled) {
-    lv_label_set_text(bluetooth_label, LV_SYMBOL_BLUETOOTH);
-  } else {
-    lv_label_set_text(bluetooth_label, "");
-    set_current_music("");
+  if (lvgl_port_lock(-1)) {
+    if (enabled) {
+      lv_label_set_text(bluetooth_label, LV_SYMBOL_BLUETOOTH);
+    } else {
+      lv_label_set_text(bluetooth_label, "");
+      set_current_music("");
+    }
+    lvgl_port_unlock();
   }
 }
 
