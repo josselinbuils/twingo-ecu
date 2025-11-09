@@ -9,6 +9,7 @@
 #define DEVELOP 0
 
 void init_ui();
+void set_bluetooth_state(bool enabled);
 void set_current_music(char *current_music);
 void set_music_cover(uint8_t *music_cover_map_src);
 void set_rpm(uint16_t rpm);

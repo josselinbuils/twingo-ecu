@@ -40,6 +40,7 @@ uint8_t music_cover_map[4096];
 
 u_int16_t peer_connection_handle = 0;
 
+void (*set_bluetooth_state_callback)(bool enabled);
 void (*set_current_music_callback)(const char *current_music);
 void (*set_music_cover_callback)(const uint8_t *music_cover_map);
 
@@ -129,7 +130,11 @@ void host_task(void *param) {
   nimble_port_freertos_deinit();
 }
 
-void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) {
+void init_ble(
+  void (*bluetooth_state_callback)(),
+  void (*current_music_callback)(),
+  void (*music_cover_callback)()
+) {
   // Initialize NVS — it is used to store PHY calibration data
   esp_err_t ret = nvs_flash_init();
 
@@ -139,6 +144,7 @@ void init_ble(void (*current_music_callback)(), void (*music_cover_callback)()) 
   }
   ESP_ERROR_CHECK(ret);
 
+  set_bluetooth_state_callback = bluetooth_state_callback;
   set_current_music_callback = current_music_callback;
   set_music_cover_callback = music_cover_callback;
 
@@ -173,6 +179,8 @@ static void on_disc_complete(const struct peer *peer, int status, void *arg) {
   }
 
   peer_connection_handle = peer->conn_handle;
+
+  (*set_bluetooth_state_callback)(true);
 
   ESP_LOGI(TAG, "Service discovery complete; status=%d conn_handle=%d", status, peer->conn_handle);
 
@@ -243,7 +251,8 @@ static int on_gap_event(struct ble_gap_event *event, void *arg) {
       peer_delete(event->disconnect.conn.conn_handle);
 
       peer_connection_handle = 0;
-      (*set_current_music_callback)("");
+
+      (*set_bluetooth_state_callback)(false);
 
       // Resume scanning
       scan();

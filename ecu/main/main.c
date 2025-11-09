@@ -60,7 +60,7 @@ void app_main() {
   init_ui();
 
   ESP_LOGI(TAG, "Initialize BLE");
-  init_ble(set_current_music, set_music_cover);
+  init_ble(set_bluetooth_state, set_current_music, set_music_cover);
 
   if (!check_i2c_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");

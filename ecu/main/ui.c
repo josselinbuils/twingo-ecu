@@ -15,6 +15,7 @@ const int SCALE_SIZE = 980;
 const int TICK_LENGTH = INDICATOR_WIDTH + PADDING * 2 - 2;
 const int TICK_WIDTH = 2;
 
+lv_obj_t *bluetooth_label;
 lv_obj_t *cover_img;
 lv_obj_t *indic;
 lv_obj_t *music_artist_label;
@@ -213,15 +214,34 @@ void init_ui() {
     lv_obj_set_style_transform_scale(music_artist_label, 80 * 255 / 100, LV_PART_MAIN);
     lv_label_set_text(music_artist_label, "");
 
+    // Add cover image
+
     cover_img = lv_img_create(inner_scale);
 
     lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
+
+    // Add bluetooth label
+
+    bluetooth_label = lv_label_create(lv_screen_active());
+
+    lv_obj_align(bluetooth_label, LV_ALIGN_TOP_LEFT, 20, 20);
+    lv_obj_add_style(bluetooth_label, &label_style, 0);
+    lv_label_set_text(bluetooth_label, "");
 
     if (DEVELOP) {
       lv_arc_set_value(indic, 5500);
     }
 
     lvgl_port_unlock();
+  }
+}
+
+void set_bluetooth_state(bool enabled) {
+  if (enabled) {
+    lv_label_set_text(bluetooth_label, LV_SYMBOL_BLUETOOTH);
+  } else {
+    lv_label_set_text(bluetooth_label, "");
+    set_current_music("");
   }
 }
 
