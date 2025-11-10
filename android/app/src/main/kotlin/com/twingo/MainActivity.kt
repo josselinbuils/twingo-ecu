@@ -1,9 +1,6 @@
 package com.twingo
 
-import android.Manifest.permission.BLUETOOTH_ADVERTISE
-import android.Manifest.permission.BLUETOOTH_CONNECT
-import android.Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
-import android.Manifest.permission.POST_NOTIFICATIONS
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
@@ -240,14 +237,6 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(broadcastReceiver)
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        log("onNewIntent")
-        super.onNewIntent(intent)
-        overrideActivityTransition(
-            OVERRIDE_TRANSITION_OPEN, android.R.anim.fade_in, android.R.anim.fade_out
-        )
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
@@ -262,10 +251,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun onClickSendMusic(view: View) {
+    fun onClickTest(view: View) {
         val synchronizer = synchronizer
 
         if (synchronizer != null) {
+            synchronizer.sendNotification(
+                Synchronizer.UUID_CHARACTERISTIC_SPEED_LIMIT,
+                "50".toByteArray(Charsets.UTF_8)
+            )
+
             val coverSize = 64
             val grayscaleDataBytes = ByteArray(coverSize * coverSize)
             val grayscaleBitmap = createBitmap(coverSize, coverSize, Bitmap.Config.ARGB_8888)
@@ -377,8 +371,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun grantAppPermissions(completion: (Boolean) -> Unit) {
         val permissions = arrayOf(
-            BLUETOOTH_CONNECT, BLUETOOTH_ADVERTISE, FOREGROUND_SERVICE_CONNECTED_DEVICE,
-            POST_NOTIFICATIONS
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_NETWORK_STATE,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE,
+            Manifest.permission.INTERNET,
+            Manifest.permission.POST_NOTIFICATIONS
         )
 
         if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {

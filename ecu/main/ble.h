@@ -21,7 +21,8 @@ int ble_check_connection();
 void ble_init(
   void (*bluetooth_state_callback)(bool enabled),
   void (*current_music_callback)(char *current_music),
-  void (*music_cover_callback)(uint8_t *music_cover_map)
+  void (*music_cover_callback)(uint8_t *music_cover_map),
+  void (*speed_limit_callback)(char *speed_limit)
 );
 
 #endif

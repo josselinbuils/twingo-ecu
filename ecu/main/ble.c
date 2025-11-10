@@ -28,6 +28,10 @@ static const ble_uuid_t *remote_chr_ping_uuid = BLE_UUID128_DECLARE(
   0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x53, 0x46, 0x39, 0x39,
 );
 
+static const ble_uuid_t *remote_chr_speed_limit_uuid = BLE_UUID128_DECLARE(
+  0x29, 0x3a, 0x58, 0x56, 0xef, 0xdf, 0x10, 0xbc, 0xfa, 0x4f, 0x77, 0x84, 0x54, 0x46, 0x39, 0x39,
+);
+
 uint8_t music_cover_map[4096];
 
 u_int16_t peer_connection_handle = 0;
@@ -35,6 +39,7 @@ u_int16_t peer_connection_handle = 0;
 void (*set_bluetooth_state_callback)(bool enabled);
 void (*set_current_music_callback)(char *current_music);
 void (*set_music_cover_callback)(uint8_t *music_cover_map);
+void (*set_speed_limit_callback)(char *speed_limit);
 
 int ble_check_connection() {
   if (peer_connection_handle == 0) {
@@ -125,7 +130,8 @@ void ble_host_task(void *param) {
 void ble_init(
   void (*bluetooth_state_callback)(bool enabled),
   void (*current_music_callback)(char *current_music),
-  void (*music_cover_callback)(uint8_t *music_cover_map)
+  void (*music_cover_callback)(uint8_t *music_cover_map),
+  void (*speed_limit_callback)(char *speed_limit)
 ) {
   // Initialize NVS — it is used to store PHY calibration data
   esp_err_t ret = nvs_flash_init();
@@ -139,6 +145,7 @@ void ble_init(
   set_bluetooth_state_callback = bluetooth_state_callback;
   set_current_music_callback = current_music_callback;
   set_music_cover_callback = music_cover_callback;
+  set_speed_limit_callback = speed_limit_callback;
 
   ret = nimble_port_init();
 
@@ -313,6 +320,14 @@ static int ble_on_gap_event(struct ble_gap_event *event, void *arg) {
         if (offset == 0) {
           (*set_music_cover_callback)(music_cover_map);
         }
+      } else if (ble_uuid_cmp(&chr->chr.uuid.u, remote_chr_speed_limit_uuid) == 0) {
+        char *str;
+        str = malloc(buffer_len + 1);
+        os_mbuf_copydata(event->notify_rx.om, 0, buffer_len, str);
+        str[buffer_len] = '\0';
+        ESP_LOGI(TAG, "Speed limit received: %s", str);
+        (*set_speed_limit_callback)(str);
+        free(str);
       }
       return 0;
 

@@ -2,7 +2,7 @@
     <string name="app_name">Twingo</string>
     <string name="button_clear">Clear</string>
     <string name="button_restart">Restart</string>
-    <string name="button_send_music">Send music</string>
+    <string name="button_test">Test</string>
     <string name="option_current_session">Current</string>
     <string name="option_previous_session">Previous</string>
     <string name="text_connected">Central connected</string>

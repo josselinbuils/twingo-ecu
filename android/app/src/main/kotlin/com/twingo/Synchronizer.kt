@@ -19,9 +19,13 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 import android.graphics.Bitmap
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
+import android.net.Uri
 import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
@@ -31,17 +35,26 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import androidx.core.graphics.set
+import com.android.volley.RequestQueue
+import com.android.volley.toolbox.StringRequest
+import com.android.volley.toolbox.Volley
 import com.twingo.lib.LogLevel
 import java.text.Normalizer
 import java.util.UUID
 import kotlin.math.ceil
 import kotlin.math.min
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 private const val DEBUG = false
 private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
 private const val REGISTER_CONTROLLER_INIT_INTERVAL_MS = 5000
 private const val REGISTER_CONTROLLER_INTERVAL_MS = 10000
 private const val RESTART_GATT_SERVER_DELAY_MS = 20000
+private const val LOCATION_REFRESH_TIME = 15000
+private const val LOCATION_REFRESH_DISTANCE = 50
 
 class Synchronizer : Service() {
     companion object {
@@ -62,6 +75,7 @@ class Synchronizer : Service() {
         const val UUID_CHARACTERISTIC_CURRENT_MUSIC = "39394651-8477-4ffa-bc10-dfef56583a29"
         const val UUID_CHARACTERISTIC_MUSIC_COVER = "39394652-8477-4ffa-bc10-dfef56583a29"
         const val UUID_CHARACTERISTIC_PING = "39394653-8477-4ffa-bc10-dfef56583a29"
+        const val UUID_CHARACTERISTIC_SPEED_LIMIT = "39394654-8477-4ffa-bc10-dfef56583a29"
         const val UUID_SERVICE = "39394650-8477-4ffa-bc10-dfef56583a29"
     }
 
@@ -74,17 +88,14 @@ class Synchronizer : Service() {
         getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
     }
     private var connectedDevice: BluetoothDevice? = null
-
     private var currentTitle: String? = null
     private var gattServer: BluetoothGattServer? = null
     private var handler: Handler? = null
     private val instance = this
     private var isAdvertising = false
     private var mediaController: MediaController? = null
-    private val mediaSessionManager: MediaSessionManager by lazy {
-        getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
-    }
     private var mtu = 512
+    private var requestQueue: RequestQueue? = null
 
     private val advertiseSettings =
         AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
@@ -160,6 +171,45 @@ class Synchronizer : Service() {
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
             log("MTU changed: $mtu")
             instance.mtu = mtu
+        }
+    }
+
+    private val locationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            log("Location changed: ${location.latitude}, ${location.longitude}", LogLevel.VERBOSE)
+
+            val request = StringRequest(
+                "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:1000];way(around:5,${location.latitude}, ${location.longitude})[maxspeed];out")}",
+                { response ->
+                    val jsonObject = Json.parseToJsonElement(response).jsonObject
+                    val elements = jsonObject.getValue("elements").jsonArray
+
+                    if (!elements.isEmpty()) {
+                        val tags = elements[0].jsonObject.getValue("tags").jsonObject
+                        val maxSpeed = tags.getValue("maxspeed").jsonPrimitive.content
+
+                        log("Max speed: $maxSpeed", LogLevel.VERBOSE)
+                        sendNotification(
+                            UUID_CHARACTERISTIC_SPEED_LIMIT, maxSpeed.toByteArray(Charsets.UTF_8)
+                        )
+                    } else {
+                        log("No max speed found", LogLevel.VERBOSE)
+                        sendNotification(
+                            UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
+                        )
+                    }
+                },
+                { error -> log("$error", LogLevel.ERROR) }
+            )
+            requestQueue?.add(request)
+        }
+
+        override fun onProviderEnabled(provider: String) {
+            log("Location provider enabled: $provider")
+        }
+
+        override fun onProviderDisabled(provider: String) {
+            log("Location provider disabled: $provider")
         }
     }
 
@@ -246,9 +296,13 @@ class Synchronizer : Service() {
             .build()
 
         startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+
+        handler = Handler(Looper.getMainLooper())
+        requestQueue = Volley.newRequestQueue(this)
+
         startGattServer()
         startAdvertising()
-        handler = Handler(Looper.getMainLooper())
+        startLocationListener()
     }
 
     override fun onDestroy() {
@@ -256,6 +310,7 @@ class Synchronizer : Service() {
         unregisterMediaController()
         stopAdvertising()
         stopGattServer()
+        stopLocationListener()
     }
 
     fun sendNotification(uuid: String, data: ByteArray, split: Boolean = false) {
@@ -328,6 +383,7 @@ class Synchronizer : Service() {
     private fun registerMediaController() {
         log("Register media controller", LogLevel.VERBOSE)
 
+        val mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         val componentName = ComponentName(instance, NotificationListener::class.java)
         val controller = mediaSessionManager.getActiveSessions(componentName).getOrNull(0)
 
@@ -345,7 +401,7 @@ class Synchronizer : Service() {
             }
             controller.registerCallback(mediaControllerCallback)
         } else {
-            log("No media controller found")
+            log("No media controller found", LogLevel.VERBOSE)
 
             if (currentTitle != "") {
                 currentTitle = ""
@@ -359,80 +415,6 @@ class Synchronizer : Service() {
         intent.putExtra(INTENT_BITMAPS_BITMAP, bitmap)
         intent.putExtra(INTENT_BITMAPS_GRAYSCALE_BITMAP, grayscaleBitmap)
         this.sendBroadcast(intent)
-    }
-
-    private fun sendState(state: String) {
-        val intent = Intent(INTENT_STATE)
-        intent.putExtra(INTENT_STATE_STATE, state)
-        this.sendBroadcast(intent)
-    }
-
-    private fun startAdvertising() {
-        if (!isAdvertising && connectedDevice == null) {
-            log("Start advertising")
-            isAdvertising = true
-            bluetoothManager.adapter.bluetoothLeAdvertiser.startAdvertising(
-                advertiseSettings, advertiseData, advertiseCallback
-            )
-        }
-    }
-
-    private fun startGattServer() {
-        log("Start GATT server")
-
-        this.gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
-
-        val service = BluetoothGattService(
-            UUID.fromString(UUID_SERVICE), BluetoothGattService.SERVICE_TYPE_PRIMARY
-        )
-
-        val currentMusicCharacteristic = BluetoothGattCharacteristic(
-            UUID.fromString(UUID_CHARACTERISTIC_CURRENT_MUSIC),
-            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            BluetoothGattCharacteristic.PERMISSION_READ
-        )
-        service.addCharacteristic(currentMusicCharacteristic)
-
-        val musicCoverCharacteristic = BluetoothGattCharacteristic(
-            UUID.fromString(UUID_CHARACTERISTIC_MUSIC_COVER),
-            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-            BluetoothGattCharacteristic.PERMISSION_READ
-        )
-        service.addCharacteristic(musicCoverCharacteristic)
-
-        val pingCharacteristic = BluetoothGattCharacteristic(
-            UUID.fromString(UUID_CHARACTERISTIC_PING),
-            BluetoothGattCharacteristic.PROPERTY_READ,
-            BluetoothGattCharacteristic.PERMISSION_READ
-        )
-        service.addCharacteristic(pingCharacteristic)
-
-        val result = gattServer?.addService(service) ?: false
-
-        if (result) {
-            log("GATT service added")
-        } else {
-            log("GATT service not added", LogLevel.ERROR)
-        }
-    }
-
-    private fun stopAdvertising() {
-        if (isAdvertising) {
-            log("Stop advertising")
-            isAdvertising = false
-            bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
-        }
-    }
-
-    private fun stopGattServer() {
-        if (gattServer != null) {
-            log("Stop GATT server")
-            gattServer?.close()
-            gattServer = null
-            sendState(STATE_GATT_SERVER_STOPPED)
-        } else {
-            log("Cannot stop GATT server: not running", LogLevel.WARNING)
-        }
     }
 
     private fun sendCurrentMusic(metadata: MediaMetadata?) {
@@ -496,6 +478,107 @@ class Synchronizer : Service() {
         } else {
             sendNotification(UUID_CHARACTERISTIC_CURRENT_MUSIC, "".toByteArray(Charsets.UTF_8))
         }
+    }
+
+    private fun sendState(state: String) {
+        val intent = Intent(INTENT_STATE)
+        intent.putExtra(INTENT_STATE_STATE, state)
+        this.sendBroadcast(intent)
+    }
+
+    private fun startAdvertising() {
+        if (!isAdvertising && connectedDevice == null) {
+            log("Start advertising")
+            isAdvertising = true
+            bluetoothManager.adapter.bluetoothLeAdvertiser.startAdvertising(
+                advertiseSettings, advertiseData, advertiseCallback
+            )
+        }
+    }
+
+    private fun startGattServer() {
+        log("Start GATT server")
+
+        this.gattServer = bluetoothManager.openGattServer(this, gattServerCallback)
+
+        val service = BluetoothGattService(
+            UUID.fromString(UUID_SERVICE), BluetoothGattService.SERVICE_TYPE_PRIMARY
+        )
+
+        val currentMusicCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(UUID_CHARACTERISTIC_CURRENT_MUSIC),
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+        service.addCharacteristic(currentMusicCharacteristic)
+
+        val musicCoverCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(UUID_CHARACTERISTIC_MUSIC_COVER),
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+        service.addCharacteristic(musicCoverCharacteristic)
+
+        val pingCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(UUID_CHARACTERISTIC_PING),
+            BluetoothGattCharacteristic.PROPERTY_READ,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+        service.addCharacteristic(pingCharacteristic)
+
+        val speedLimitCharacteristic = BluetoothGattCharacteristic(
+            UUID.fromString(UUID_CHARACTERISTIC_SPEED_LIMIT),
+            BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+            BluetoothGattCharacteristic.PERMISSION_READ
+        )
+        service.addCharacteristic(speedLimitCharacteristic)
+
+        val result = gattServer?.addService(service) ?: false
+
+        if (result) {
+            log("GATT service added")
+        } else {
+            log("GATT service not added", LogLevel.ERROR)
+        }
+    }
+
+    private fun startLocationListener() {
+        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+
+        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER, LOCATION_REFRESH_TIME.toLong(),
+                LOCATION_REFRESH_DISTANCE.toFloat(), locationListener
+            )
+            log("Location listener registered")
+        } else {
+            log("No GPS provider or no permission", LogLevel.ERROR)
+        }
+    }
+
+    private fun stopAdvertising() {
+        if (isAdvertising) {
+            log("Stop advertising")
+            isAdvertising = false
+            bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+        }
+    }
+
+    private fun stopGattServer() {
+        if (gattServer != null) {
+            log("Stop GATT server")
+            gattServer?.close()
+            gattServer = null
+            sendState(STATE_GATT_SERVER_STOPPED)
+        } else {
+            log("Cannot stop GATT server: not running", LogLevel.WARNING)
+        }
+    }
+
+    private fun stopLocationListener() {
+        log("Stop location manager")
+        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+        locationManager.removeUpdates(locationListener)
     }
 
     private fun unregisterMediaController() {

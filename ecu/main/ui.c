@@ -28,6 +28,8 @@ lv_obj_t *main_screen;
 lv_obj_t *menu_screen;
 lv_obj_t *music_artist_label;
 lv_obj_t *music_title_label;
+lv_obj_t *speed_limit_border_label;
+lv_obj_t *speed_limit_label;
 
 lv_draw_buf_t music_cover = {
   .header =
@@ -256,6 +258,41 @@ void ui_create_main_screen() {
   lv_obj_align(bluetooth_label, LV_ALIGN_TOP_LEFT, 20, 20);
   lv_obj_add_style(bluetooth_label, &label_style, 0);
   lv_label_set_text(bluetooth_label, "");
+
+  // Add speed limit label
+
+  speed_limit_border_label = lv_label_create(main_screen);
+
+  static lv_style_t speed_border_label_style;
+
+  lv_style_init(&speed_border_label_style);
+  lv_style_set_border_color(&speed_border_label_style, COLOR);
+  lv_style_set_border_width(&speed_border_label_style, 10);
+  lv_style_set_outline_color(&speed_border_label_style, BACKGROUND_COLOR);
+  lv_style_set_radius(&speed_border_label_style, 50);
+
+  lv_obj_set_width(speed_limit_border_label, 100);
+  lv_obj_set_height(speed_limit_border_label, 100);
+  lv_obj_align(speed_limit_border_label, LV_ALIGN_TOP_RIGHT, -20, 20);
+  lv_obj_add_style(speed_limit_border_label, &speed_border_label_style, 0);
+  lv_label_set_text(speed_limit_border_label, "");
+  lv_obj_add_flag(speed_limit_border_label, LV_OBJ_FLAG_HIDDEN);
+
+  speed_limit_label = lv_label_create(main_screen);
+
+  static lv_style_t speed_label_style;
+
+  lv_style_init(&speed_label_style);
+  lv_style_set_text_color(&speed_label_style, COLOR);
+  lv_style_set_text_font(&speed_label_style, &lv_font_montserrat_48);
+  lv_style_set_text_align(&speed_label_style, LV_TEXT_ALIGN_CENTER);
+  lv_style_set_transform_scale(&speed_label_style, 80 * 255 / 100);
+
+  lv_obj_set_width(speed_limit_label, 80);
+  lv_obj_align(speed_limit_label, LV_ALIGN_TOP_RIGHT, -20, 50);
+  lv_obj_add_style(speed_limit_label, &speed_label_style, 0);
+  lv_label_set_text(speed_limit_label, "");
+  lv_obj_add_flag(speed_limit_label, LV_OBJ_FLAG_HIDDEN);
 }
 
 void ui_create_menu_screen() {
@@ -292,7 +329,6 @@ void ui_create_menu_screen() {
   lv_style_set_bg_color(&style_btn, BACKGROUND_COLOR);
   lv_style_set_border_color(&style_btn, COLOR);
   lv_style_set_border_width(&style_btn, BORDER_WIDTH);
-  lv_style_set_outline_color(&style_btn, BACKGROUND_COLOR);
   lv_style_set_radius(&style_btn, 20);
   lv_style_set_shadow_width(&style_btn, 0);
   lv_style_set_text_color(&style_btn, COLOR);
@@ -425,6 +461,7 @@ void ui_set_bluetooth_state(bool enabled) {
     } else {
       lv_label_set_text(bluetooth_label, "");
       ui_set_current_music("");
+      ui_set_speed_limit("");
     }
     lvgl_port_unlock();
   }
@@ -484,6 +521,21 @@ void ui_set_music_cover(uint8_t *music_cover_map) {
 
 void ui_set_rpm(uint16_t rpm) {
   lv_arc_set_value(indic, rpm);
+}
+
+void ui_set_speed_limit(char *speed_limit) {
+  if (lvgl_port_lock(-1)) {
+    if (strlen(speed_limit) > 0) {
+      lv_label_set_text(speed_limit_label, speed_limit);
+      lv_obj_remove_flag(speed_limit_label, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_remove_flag(speed_limit_border_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_label_set_text(speed_limit_label, "");
+      lv_obj_add_flag(speed_limit_label, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(speed_limit_border_label, LV_OBJ_FLAG_HIDDEN);
+    }
+    lvgl_port_unlock();
+  }
 }
 
 void ui_unlock() {
