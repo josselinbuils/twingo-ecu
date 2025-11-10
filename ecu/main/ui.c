@@ -277,24 +277,26 @@ void ui_create_menu_screen() {
 
   lv_style_init(&style_bg);
   lv_style_set_bg_color(&style_bg, BACKGROUND_COLOR);
+  lv_style_set_border_width(&style_bg, 0);
+  lv_style_set_pad_bottom(&style_bg, 200);
+  lv_style_set_pad_gap(&style_bg, 100);
   lv_style_set_pad_left(&style_bg, 100);
   lv_style_set_pad_right(&style_bg, 100);
   lv_style_set_pad_top(&style_bg, 200);
-  lv_style_set_pad_bottom(&style_bg, 200);
-  lv_style_set_pad_gap(&style_bg, 100);
-  lv_style_set_border_width(&style_bg, 0);
 
   lv_obj_add_style(button_matrix, &style_bg, 0);
 
   static lv_style_t style_btn;
 
   lv_style_init(&style_btn);
-  lv_style_set_border_width(&style_btn, 4);
-  lv_style_set_border_color(&style_btn, COLOR);
   lv_style_set_bg_color(&style_btn, BACKGROUND_COLOR);
+  lv_style_set_border_color(&style_btn, COLOR);
+  lv_style_set_border_width(&style_btn, BORDER_WIDTH);
+  lv_style_set_outline_color(&style_btn, BACKGROUND_COLOR);
+  lv_style_set_radius(&style_btn, 20);
+  lv_style_set_shadow_width(&style_btn, 0);
   lv_style_set_text_color(&style_btn, COLOR);
   lv_style_set_text_font(&style_btn, &lv_font_montserrat_48);
-  lv_style_set_radius(&style_btn, 20);
 
   lv_obj_add_style(button_matrix, &style_btn, LV_PART_ITEMS);
 
