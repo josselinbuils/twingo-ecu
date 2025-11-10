@@ -19,8 +19,6 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 import android.graphics.Bitmap
-import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -48,14 +46,14 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.charset.StandardCharsets
+import java.util.function.Consumer
 
 private const val DEBUG = false
+private const val DEVICE_GATT_INIT_PERIOD_MS = 5000
 private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
-private const val REGISTER_CONTROLLER_INIT_INTERVAL_MS = 5000
-private const val REGISTER_CONTROLLER_INTERVAL_MS = 10000
+private const val REFRESH_LOCATION_PERIOD_MS = 10000
+private const val REGISTER_CONTROLLER_PERIOD_MS = 10000
 private const val RESTART_GATT_SERVER_DELAY_MS = 20000
-private const val LOCATION_REFRESH_TIME = 15000
-private const val LOCATION_REFRESH_DISTANCE = 50
 
 class Synchronizer : Service() {
     companion object {
@@ -135,15 +133,18 @@ class Synchronizer : Service() {
 
                 handler?.removeCallbacks(restartGattServerTask)
                 stopAdvertising()
+                handler?.removeCallbacksAndMessages(null)
                 unregisterMediaController()
                 handler?.postDelayed(
-                    registerMediaControllerTask, REGISTER_CONTROLLER_INIT_INTERVAL_MS.toLong()
+                    registerMediaControllerTask, DEVICE_GATT_INIT_PERIOD_MS.toLong()
                 )
+                handler?.postDelayed(refreshLocationTask, DEVICE_GATT_INIT_PERIOD_MS.toLong())
                 sendState(STATE_CENTRAL_CONNECTED)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connectedDevice = null
                 log("Central has disconnected", LogLevel.INFO)
                 log("Device address: ${device.address}")
+                handler?.removeCallbacksAndMessages(null)
                 unregisterMediaController()
                 startAdvertising()
                 sendState(STATE_CENTRAL_DISCONNECTED)
@@ -175,51 +176,6 @@ class Synchronizer : Service() {
         }
     }
 
-    private val locationListener = object : LocationListener {
-        override fun onLocationChanged(location: Location) {
-            log("Location changed: ${location.latitude}, ${location.longitude}", LogLevel.VERBOSE)
-
-            val request = StringRequest(
-                "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:3000];way(around:5,${location.latitude}, ${location.longitude})[maxspeed];out;")}",
-                { response ->
-                    val jsonObject = Json.parseToJsonElement(response).jsonObject
-                    val elements = jsonObject.getValue("elements").jsonArray
-
-                    if (!elements.isEmpty()) {
-                        val tags = elements[0].jsonObject.getValue("tags").jsonObject
-                        val maxSpeed = tags.getValue("maxspeed").jsonPrimitive.content
-
-                        log("Max speed: $maxSpeed", LogLevel.VERBOSE)
-                        sendNotification(
-                            UUID_CHARACTERISTIC_SPEED_LIMIT, maxSpeed.toByteArray(Charsets.UTF_8)
-                        )
-                    } else {
-                        log("No max speed found", LogLevel.VERBOSE)
-                        sendNotification(
-                            UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
-                        )
-                    }
-                },
-                { error ->
-                    val statusText = String(error.networkResponse.data, StandardCharsets.UTF_8)
-                    log(
-                        "Overpass API error: ${error.networkResponse.statusCode} $statusText",
-                        LogLevel.ERROR
-                    )
-                }
-            )
-            requestQueue?.add(request)
-        }
-
-        override fun onProviderEnabled(provider: String) {
-            log("Location provider enabled: $provider")
-        }
-
-        override fun onProviderDisabled(provider: String) {
-            log("Location provider disabled: $provider")
-        }
-    }
-
     private val mediaControllerCallback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) {
             val newCurrentTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
@@ -239,16 +195,69 @@ class Synchronizer : Service() {
         }
     }
 
-    val registerMediaControllerTask: Runnable = Runnable {
+    private val refreshLocationTask: Runnable = Runnable {
+        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+
+        locationManager.getCurrentLocation(
+            LocationManager.GPS_PROVIDER,
+            null,
+            application.mainExecutor,
+            { location ->
+                if (location != null) {
+                    log("Location: ${location.latitude}, ${location.longitude}", LogLevel.VERBOSE)
+
+                    val request = StringRequest(
+                        "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:3000];way(around:5,${location.latitude}, ${location.longitude})[maxspeed];out;")}",
+                        { response ->
+                            val jsonObject = Json.parseToJsonElement(response).jsonObject
+                            val elements = jsonObject.getValue("elements").jsonArray
+
+                            if (!elements.isEmpty()) {
+                                val tags = elements[0].jsonObject.getValue("tags").jsonObject
+                                val maxSpeed = tags.getValue("maxspeed").jsonPrimitive.content
+
+                                log("Max speed: $maxSpeed", LogLevel.VERBOSE)
+                                sendNotification(
+                                    UUID_CHARACTERISTIC_SPEED_LIMIT,
+                                    maxSpeed.toByteArray(Charsets.UTF_8)
+                                )
+                            } else {
+                                log("No max speed found", LogLevel.VERBOSE)
+                                sendNotification(
+                                    UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
+                                )
+                            }
+                        },
+                        { error ->
+                            val statusCode = error.networkResponse.statusCode
+
+                            if (statusCode != 504) {
+                                val statusText =
+                                    String(error.networkResponse.data, StandardCharsets.UTF_8)
+
+                                log("Overpass API error: $statusCode $statusText", LogLevel.ERROR)
+                            }
+                        }
+                    )
+                    requestQueue?.add(request)
+                } else {
+                    log("Unable to get current location", LogLevel.VERBOSE)
+                }
+            }
+        )
+        handler?.postDelayed(refreshLocationTask, REFRESH_LOCATION_PERIOD_MS.toLong())
+    }
+
+    private val registerMediaControllerTask: Runnable = Runnable {
         registerMediaController()
 
         if (handler == null) {
             log("Handler not initialised", LogLevel.ERROR)
         }
-        handler?.postDelayed(registerMediaControllerTask, REGISTER_CONTROLLER_INTERVAL_MS.toLong())
+        handler?.postDelayed(registerMediaControllerTask, REGISTER_CONTROLLER_PERIOD_MS.toLong())
     }
 
-    val restartGattServerTask: Runnable = Runnable {
+    private val restartGattServerTask: Runnable = Runnable {
         restartGattServer()
     }
 
@@ -309,15 +318,13 @@ class Synchronizer : Service() {
 
         startGattServer()
         startAdvertising()
-        startLocationListener()
     }
 
     override fun onDestroy() {
-        handler?.removeCallbacks(restartGattServerTask)
+        handler?.removeCallbacksAndMessages(null)
         unregisterMediaController()
         stopAdvertising()
         stopGattServer()
-        stopLocationListener()
     }
 
     fun sendNotification(uuid: String, data: ByteArray, split: Boolean = false) {
@@ -372,7 +379,7 @@ class Synchronizer : Service() {
 
     fun restartGattServer() {
         log("Restart GATT server", LogLevel.INFO)
-        handler?.removeCallbacks(restartGattServerTask)
+        handler?.removeCallbacksAndMessages(null)
         unregisterMediaController()
         stopAdvertising()
         stopGattServer()
@@ -549,20 +556,6 @@ class Synchronizer : Service() {
         }
     }
 
-    private fun startLocationListener() {
-        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
-
-        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, LOCATION_REFRESH_TIME.toLong(),
-                LOCATION_REFRESH_DISTANCE.toFloat(), locationListener
-            )
-            log("Location listener registered")
-        } else {
-            log("No GPS provider or no permission", LogLevel.ERROR)
-        }
-    }
-
     private fun stopAdvertising() {
         if (isAdvertising) {
             log("Stop advertising")
@@ -582,15 +575,8 @@ class Synchronizer : Service() {
         }
     }
 
-    private fun stopLocationListener() {
-        log("Stop location manager")
-        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
-        locationManager.removeUpdates(locationListener)
-    }
-
     private fun unregisterMediaController() {
         log("Unregister media controller")
-        handler?.removeCallbacks(registerMediaControllerTask)
         mediaController?.unregisterCallback(mediaControllerCallback)
         currentTitle = null
         mediaController = null
