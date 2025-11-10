@@ -47,6 +47,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.nio.charset.StandardCharsets
 
 private const val DEBUG = false
 private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
@@ -179,7 +180,7 @@ class Synchronizer : Service() {
             log("Location changed: ${location.latitude}, ${location.longitude}", LogLevel.VERBOSE)
 
             val request = StringRequest(
-                "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:1000];way(around:5,${location.latitude}, ${location.longitude})[maxspeed];out")}",
+                "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:3000];way(around:5,${location.latitude}, ${location.longitude})[maxspeed];out;")}",
                 { response ->
                     val jsonObject = Json.parseToJsonElement(response).jsonObject
                     val elements = jsonObject.getValue("elements").jsonArray
@@ -199,7 +200,13 @@ class Synchronizer : Service() {
                         )
                     }
                 },
-                { error -> log("$error", LogLevel.ERROR) }
+                { error ->
+                    val statusText = String(error.networkResponse.data, StandardCharsets.UTF_8)
+                    log(
+                        "Overpass API error: ${error.networkResponse.statusCode} $statusText",
+                        LogLevel.ERROR
+                    )
+                }
             )
             requestQueue?.add(request)
         }
