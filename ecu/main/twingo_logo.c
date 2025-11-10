@@ -399,5 +399,5 @@ const lv_image_dsc_t twingo_logo = {
     },
   .data_size = sizeof(twingo_logo_map),
   .data = twingo_logo_map,
-  .reserved = NULL,
+  .reserved = NULL
 };

@@ -24,225 +24,302 @@ lv_obj_t *bluetooth_label;
 lv_obj_t *cover_img;
 lv_obj_t *indic;
 lv_obj_t *logo_button;
+lv_obj_t *main_screen;
+lv_obj_t *menu_screen;
 lv_obj_t *music_artist_label;
 lv_obj_t *music_title_label;
+
+lv_draw_buf_t music_cover = {
+  .header =
+    {
+      .magic = LV_IMAGE_HEADER_MAGIC,
+      .cf = LV_COLOR_FORMAT_A8,
+      .flags = 0,
+      .w = 64,
+      .h = 64,
+      .stride = 64,
+      .reserved_2 = 0,
+    },
+  .data_size = 4096,
+  .data = NULL
+};
 
 char music_artist[100];
 char music_title[100];
 
 esp_err_t ui_init_lvgl(void);
+void ui_on_click_logo();
+void ui_on_menu_button_click(lv_event_t *event);
 
-void ui_init(lv_event_cb_t twingo_click_callback) {
+void ui_create_main_screen() {
+  main_screen = lv_obj_create(NULL);
+
+  lv_obj_set_style_bg_color(main_screen, BACKGROUND_COLOR, LV_PART_MAIN);
+
+  lv_obj_clear_flag(main_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Arc indicator
+
+  indic = lv_arc_create(main_screen);
+
+  lv_obj_remove_style(indic, NULL, LV_PART_KNOB);
+  lv_obj_align(indic, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
+  lv_obj_set_size(indic, SCALE_SIZE, SCALE_SIZE);
+  lv_obj_set_style_arc_opa(indic, 0, LV_PART_MAIN);
+  lv_obj_set_style_arc_color(indic, COLOR, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(indic, INDICATOR_WIDTH, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(indic, INDICATOR_WIDTH, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(indic, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(indic, 0, LV_PART_INDICATOR);
+  lv_arc_set_rotation(indic, INDICATOR_ROTATION);
+  lv_arc_set_bg_angles(indic, 0, INDICATOR_ANGLE_RANGE);
+  lv_arc_set_range(indic, 0, INDICATOR_RANGE);
+  lv_obj_set_style_pad_all(indic, PADDING + BORDER_WIDTH, LV_PART_MAIN);
+
+  static lv_style_t indic_style;
+
+  lv_style_init(&indic_style);
+  lv_style_set_arc_rounded(&indic_style, false);
+  lv_obj_add_style(indic, &indic_style, LV_PART_INDICATOR);
+
+  // Scales
+
+  lv_obj_t *inner_scale = lv_scale_create(main_screen);
+  lv_obj_t *outer_scale = lv_scale_create(main_screen);
+
+  lv_obj_clear_flag(inner_scale, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(outer_scale, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_scale_set_mode(inner_scale, LV_SCALE_MODE_ROUND_INNER);
+  lv_scale_set_mode(outer_scale, LV_SCALE_MODE_ROUND_OUTER);
+
+  lv_obj_align(inner_scale, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
+  lv_obj_align(outer_scale, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
+
+  lv_obj_set_size(inner_scale, SCALE_SIZE, SCALE_SIZE);
+  lv_obj_set_size(outer_scale, SCALE_SIZE, SCALE_SIZE);
+
+  lv_scale_set_angle_range(inner_scale, INDICATOR_ANGLE_RANGE);
+  lv_scale_set_angle_range(outer_scale, INDICATOR_ANGLE_RANGE);
+
+  lv_scale_set_rotation(inner_scale, INDICATOR_ROTATION);
+  lv_scale_set_rotation(outer_scale, INDICATOR_ROTATION);
+
+  static lv_style_t main_line_style;
+
+  lv_style_init(&main_line_style);
+  lv_style_set_bg_color(&main_line_style, BACKGROUND_COLOR);
+  lv_style_set_arc_color(&main_line_style, COLOR);
+  lv_style_set_arc_width(&main_line_style, BORDER_WIDTH);
+
+  lv_obj_add_style(inner_scale, &main_line_style, LV_PART_MAIN);
+  lv_obj_add_style(outer_scale, &main_line_style, LV_PART_MAIN);
+
+  // Inner scale
+
+  lv_scale_set_range(inner_scale, 0, INDICATOR_RANGE);
+  lv_scale_set_total_tick_count(inner_scale, 151);
+  lv_scale_set_major_tick_every(inner_scale, 25);
+
+  lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_ITEMS);
+  lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_INDICATOR);
+
+  static lv_style_t tick_style;
+
+  lv_style_init(&tick_style);
+  lv_style_set_line_width(&tick_style, TICK_WIDTH);
+  lv_style_set_line_color(&tick_style, BACKGROUND_COLOR);
+  lv_style_set_line_width(&tick_style, TICK_WIDTH);
+  lv_style_set_text_color(&tick_style, COLOR);
+  lv_style_set_text_font(&tick_style, &lv_font_montserrat_48);
+
+  lv_scale_section_t *main_section = lv_scale_add_section(inner_scale);
+
+  lv_scale_section_set_range(main_section, 0, INDICATOR_RANGE);
+  lv_scale_set_section_style_items(inner_scale, main_section, &tick_style);
+  lv_scale_set_section_style_indicator(inner_scale, main_section, &tick_style);
+
+  static const char *labels[8] = {"0", "1", "2", "3", "4", "5", "6", NULL};
+
+  lv_scale_set_label_show(inner_scale, true);
+  lv_scale_set_text_src(inner_scale, labels);
+  lv_obj_set_style_pad_radial(inner_scale, LABELS_GAP, LV_PART_INDICATOR);
+
+  // Outer scale
+
+  lv_scale_set_label_show(outer_scale, false);
+  lv_scale_set_total_tick_count(outer_scale, 2);
+  lv_obj_set_style_length(outer_scale, 0, LV_PART_ITEMS);
+  lv_obj_set_style_pad_all(
+    outer_scale, BORDER_WIDTH + PADDING + INDICATOR_WIDTH + PADDING, LV_PART_MAIN
+  );
+
+  // End lines
+
+  static lv_style_t line_style;
+
+  lv_style_init(&line_style);
+  lv_style_set_line_width(&line_style, BORDER_WIDTH);
+  lv_style_set_line_color(&line_style, COLOR);
+
+  const int end_line_width = INDICATOR_WIDTH + PADDING * 2 + BORDER_WIDTH * 2 - 2;
+
+  static lv_point_precise_t end_line_points[] = {
+    {0, 0},
+    {1, 2},
+    {2, 4},
+    {4, 6},
+    {6, 8},
+    {8, 10},
+    {end_line_width - 8, 10},
+    {end_line_width - 6, 8},
+    {end_line_width - 4, 6},
+    {end_line_width - 2, 4},
+    {end_line_width - 1, 2},
+    {end_line_width, 0}
+  };
+  static lv_point_precise_t end_line_points_left[12];
+  static lv_point_precise_t end_line_points_right[12];
+
+  double angle_rad = 7.0 * M_PI / 180.0;
+  double x;
+  double y;
+
+  for (int i = 0; i < 12; i++) {
+    x = end_line_points[i].x;
+    y = end_line_points[i].y;
+
+    end_line_points_left[i].x = x * cos(angle_rad) + y * sin(angle_rad);
+    end_line_points_left[i].y = -x * sin(angle_rad) + y * cos(angle_rad);
+
+    end_line_points_right[i].x = x * cos(angle_rad) - y * sin(angle_rad);
+    end_line_points_right[i].y = x * sin(angle_rad) + y * cos(angle_rad);
+  }
+
+  lv_obj_t *end_line_left = lv_line_create(inner_scale);
+
+  lv_line_set_points(end_line_left, end_line_points_left, 12);
+  lv_obj_add_style(end_line_left, &line_style, 0);
+  lv_obj_align(end_line_left, LV_ALIGN_LEFT_MID, 4, 58);
+
+  lv_obj_t *end_line_right = lv_line_create(inner_scale);
+
+  lv_line_set_points(end_line_right, end_line_points_right, 12);
+  lv_obj_add_style(end_line_right, &line_style, 0);
+  lv_obj_align(end_line_right, LV_ALIGN_RIGHT_MID, -4, 58);
+
+  // Add twingo logo
+
+  logo_button = lv_imagebutton_create(main_screen);
+
+  LV_IMG_DECLARE(twingo_logo)
+  lv_imagebutton_set_src(logo_button, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &twingo_logo, NULL);
+  lv_obj_set_style_image_recolor_opa(logo_button, LV_OPA_100, 0);
+  lv_obj_set_style_image_recolor(logo_button, COLOR, 0);
+  lv_obj_align(logo_button, LV_ALIGN_CENTER, 0, 50);
+  lv_obj_remove_flag(logo_button, LV_OBJ_FLAG_PRESS_LOCK);
+  lv_obj_add_event_cb(logo_button, ui_on_click_logo, LV_EVENT_SHORT_CLICKED, NULL);
+
+  // Add current music
+
+  static lv_style_t label_style;
+
+  lv_style_init(&label_style);
+  lv_style_set_text_color(&label_style, COLOR);
+  lv_style_set_text_font(&label_style, &lv_font_montserrat_28);
+
+  music_title_label = lv_label_create(main_screen);
+
+  lv_obj_set_height(music_title_label, 30);
+  lv_label_set_long_mode(music_title_label, LV_LABEL_LONG_MODE_DOTS);
+  lv_obj_add_style(music_title_label, &label_style, 0);
+  lv_label_set_text(music_title_label, "");
+
+  music_artist_label = lv_label_create(main_screen);
+
+  lv_obj_set_height(music_artist_label, 30);
+  lv_label_set_long_mode(music_artist_label, LV_LABEL_LONG_MODE_DOTS);
+  lv_obj_add_style(music_artist_label, &label_style, 0);
+  lv_obj_set_style_transform_scale(music_artist_label, 80 * 255 / 100, LV_PART_MAIN);
+  lv_label_set_text(music_artist_label, "");
+
+  // Add cover image
+
+  cover_img = lv_img_create(inner_scale);
+
+  lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
+
+  // Add bluetooth label
+
+  bluetooth_label = lv_label_create(main_screen);
+
+  lv_obj_align(bluetooth_label, LV_ALIGN_TOP_LEFT, 20, 20);
+  lv_obj_add_style(bluetooth_label, &label_style, 0);
+  lv_label_set_text(bluetooth_label, "");
+}
+
+void ui_create_menu_screen() {
+  menu_screen = lv_obj_create(NULL);
+
+  lv_obj_set_style_bg_color(menu_screen, BACKGROUND_COLOR, LV_PART_MAIN);
+
+  lv_obj_clear_flag(menu_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *button_matrix = lv_buttonmatrix_create(menu_screen);
+
+  static const char *button_matrix_map[] = {
+    LV_SYMBOL_LEFT "  Back", LV_SYMBOL_REFRESH "  Restart", ""
+  };
+
+  lv_buttonmatrix_set_map(button_matrix, button_matrix_map);
+
+  static lv_style_t style_bg;
+
+  lv_style_init(&style_bg);
+  lv_style_set_bg_color(&style_bg, BACKGROUND_COLOR);
+  lv_style_set_pad_left(&style_bg, 100);
+  lv_style_set_pad_right(&style_bg, 100);
+  lv_style_set_pad_top(&style_bg, 200);
+  lv_style_set_pad_bottom(&style_bg, 200);
+  lv_style_set_pad_gap(&style_bg, 100);
+  lv_style_set_border_width(&style_bg, 0);
+
+  lv_obj_add_style(button_matrix, &style_bg, 0);
+
+  static lv_style_t style_btn;
+
+  lv_style_init(&style_btn);
+  lv_style_set_border_width(&style_btn, 4);
+  lv_style_set_border_color(&style_btn, COLOR);
+  lv_style_set_bg_color(&style_btn, BACKGROUND_COLOR);
+  lv_style_set_text_color(&style_btn, COLOR);
+  lv_style_set_text_font(&style_btn, &lv_font_montserrat_48);
+  lv_style_set_radius(&style_btn, 20);
+
+  lv_obj_add_style(button_matrix, &style_btn, LV_PART_ITEMS);
+
+  static lv_style_t style_btn_pressed;
+
+  lv_style_init(&style_btn_pressed);
+  lv_style_set_bg_color(&style_btn_pressed, COLOR);
+  lv_style_set_text_color(&style_btn_pressed, BACKGROUND_COLOR);
+
+  lv_obj_add_style(button_matrix, &style_btn_pressed, LV_PART_ITEMS | LV_STATE_PRESSED);
+
+  lv_obj_set_size(button_matrix, LCD_H_RES, LCD_V_RES);
+  lv_obj_align(button_matrix, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_add_event_cb(button_matrix, ui_on_menu_button_click, LV_EVENT_SHORT_CLICKED, NULL);
+}
+
+void ui_init() {
   ui_init_lvgl();
 
   vTaskDelay(1); // Prevent LVGL slow boot
 
   if (lvgl_port_lock(-1)) {
-    lv_obj_set_style_bg_color(lv_screen_active(), BACKGROUND_COLOR, LV_PART_MAIN);
-    lv_obj_clear_flag(lv_screen_active(), LV_OBJ_FLAG_SCROLLABLE);
-
-    // Arc indicator
-
-    indic = lv_arc_create(lv_screen_active());
-
-    lv_obj_remove_style(indic, NULL, LV_PART_KNOB);
-    lv_obj_align(indic, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
-    lv_obj_set_size(indic, SCALE_SIZE, SCALE_SIZE);
-    lv_obj_set_style_arc_opa(indic, 0, LV_PART_MAIN);
-    lv_obj_set_style_arc_color(indic, COLOR, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(indic, INDICATOR_WIDTH, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(indic, INDICATOR_WIDTH, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(indic, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(indic, 0, LV_PART_INDICATOR);
-    lv_arc_set_rotation(indic, INDICATOR_ROTATION);
-    lv_arc_set_bg_angles(indic, 0, INDICATOR_ANGLE_RANGE);
-    lv_arc_set_range(indic, 0, INDICATOR_RANGE);
-    lv_obj_set_style_pad_all(indic, PADDING + BORDER_WIDTH, LV_PART_MAIN);
-
-    static lv_style_t indic_style;
-
-    lv_style_init(&indic_style);
-    lv_style_set_arc_rounded(&indic_style, false);
-    lv_obj_add_style(indic, &indic_style, LV_PART_INDICATOR);
-
-    // Scales
-
-    lv_obj_t *inner_scale = lv_scale_create(lv_screen_active());
-    lv_obj_t *outer_scale = lv_scale_create(lv_screen_active());
-
-    lv_obj_clear_flag(inner_scale, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(outer_scale, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_scale_set_mode(inner_scale, LV_SCALE_MODE_ROUND_INNER);
-    lv_scale_set_mode(outer_scale, LV_SCALE_MODE_ROUND_OUTER);
-
-    lv_obj_align(inner_scale, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
-    lv_obj_align(outer_scale, LV_ALIGN_CENTER, 0, INDICATOR_POSITION_Y);
-
-    lv_obj_set_size(inner_scale, SCALE_SIZE, SCALE_SIZE);
-    lv_obj_set_size(outer_scale, SCALE_SIZE, SCALE_SIZE);
-
-    lv_scale_set_angle_range(inner_scale, INDICATOR_ANGLE_RANGE);
-    lv_scale_set_angle_range(outer_scale, INDICATOR_ANGLE_RANGE);
-
-    lv_scale_set_rotation(inner_scale, INDICATOR_ROTATION);
-    lv_scale_set_rotation(outer_scale, INDICATOR_ROTATION);
-
-    static lv_style_t main_line_style;
-
-    lv_style_init(&main_line_style);
-    lv_style_set_bg_color(&main_line_style, BACKGROUND_COLOR);
-    lv_style_set_arc_color(&main_line_style, COLOR);
-    lv_style_set_arc_width(&main_line_style, BORDER_WIDTH);
-
-    lv_obj_add_style(inner_scale, &main_line_style, LV_PART_MAIN);
-    lv_obj_add_style(outer_scale, &main_line_style, LV_PART_MAIN);
-
-    // Inner scale
-
-    lv_scale_set_range(inner_scale, 0, INDICATOR_RANGE);
-    lv_scale_set_total_tick_count(inner_scale, 151);
-    lv_scale_set_major_tick_every(inner_scale, 25);
-
-    lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_ITEMS);
-    lv_obj_set_style_length(inner_scale, TICK_LENGTH, LV_PART_INDICATOR);
-
-    static lv_style_t tick_style;
-
-    lv_style_init(&tick_style);
-    lv_style_set_line_width(&tick_style, TICK_WIDTH);
-    lv_style_set_line_color(&tick_style, BACKGROUND_COLOR);
-    lv_style_set_line_width(&tick_style, TICK_WIDTH);
-    lv_style_set_text_color(&tick_style, COLOR);
-    lv_style_set_text_font(&tick_style, &lv_font_montserrat_48);
-
-    lv_scale_section_t *main_section = lv_scale_add_section(inner_scale);
-
-    lv_scale_section_set_range(main_section, 0, INDICATOR_RANGE);
-    lv_scale_set_section_style_items(inner_scale, main_section, &tick_style);
-    lv_scale_set_section_style_indicator(inner_scale, main_section, &tick_style);
-
-    static const char *labels[8] = {"0", "1", "2", "3", "4", "5", "6", NULL};
-
-    lv_scale_set_label_show(inner_scale, true);
-    lv_scale_set_text_src(inner_scale, labels);
-    lv_obj_set_style_pad_radial(inner_scale, LABELS_GAP, LV_PART_INDICATOR);
-
-    // Outer scale
-
-    lv_scale_set_label_show(outer_scale, false);
-    lv_scale_set_total_tick_count(outer_scale, 2);
-    lv_obj_set_style_length(outer_scale, 0, LV_PART_ITEMS);
-    lv_obj_set_style_pad_all(
-      outer_scale, BORDER_WIDTH + PADDING + INDICATOR_WIDTH + PADDING, LV_PART_MAIN
-    );
-
-    // End lines
-
-    static lv_style_t line_style;
-
-    lv_style_init(&line_style);
-    lv_style_set_line_width(&line_style, BORDER_WIDTH);
-    lv_style_set_line_color(&line_style, COLOR);
-
-    const int end_line_width = INDICATOR_WIDTH + PADDING * 2 + BORDER_WIDTH * 2 - 2;
-
-    static lv_point_precise_t end_line_points[] = {
-      {0, 0},
-      {1, 2},
-      {2, 4},
-      {4, 6},
-      {6, 8},
-      {8, 10},
-      {end_line_width - 8, 10},
-      {end_line_width - 6, 8},
-      {end_line_width - 4, 6},
-      {end_line_width - 2, 4},
-      {end_line_width - 1, 2},
-      {end_line_width, 0}
-    };
-    static lv_point_precise_t end_line_points_left[12];
-    static lv_point_precise_t end_line_points_right[12];
-
-    double angle_rad = 7.0 * M_PI / 180.0;
-    double x;
-    double y;
-
-    for (int i = 0; i < 12; i++) {
-      x = end_line_points[i].x;
-      y = end_line_points[i].y;
-
-      end_line_points_left[i].x = x * cos(angle_rad) + y * sin(angle_rad);
-      end_line_points_left[i].y = -x * sin(angle_rad) + y * cos(angle_rad);
-
-      end_line_points_right[i].x = x * cos(angle_rad) - y * sin(angle_rad);
-      end_line_points_right[i].y = x * sin(angle_rad) + y * cos(angle_rad);
-    }
-
-    lv_obj_t *end_line_left = lv_line_create(inner_scale);
-
-    lv_line_set_points(end_line_left, end_line_points_left, 12);
-    lv_obj_add_style(end_line_left, &line_style, 0);
-    lv_obj_align(end_line_left, LV_ALIGN_LEFT_MID, 4, 58);
-
-    lv_obj_t *end_line_right = lv_line_create(inner_scale);
-
-    lv_line_set_points(end_line_right, end_line_points_right, 12);
-    lv_obj_add_style(end_line_right, &line_style, 0);
-    lv_obj_align(end_line_right, LV_ALIGN_RIGHT_MID, -4, 58);
-
-    // Add twingo logo
-
-    logo_button = lv_imagebutton_create(lv_screen_active());
-
-    LV_IMG_DECLARE(twingo_logo)
-    lv_imagebutton_set_src(logo_button, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &twingo_logo, NULL);
-    lv_obj_set_style_image_recolor_opa(logo_button, LV_OPA_100, 0);
-    lv_obj_set_style_image_recolor(logo_button, COLOR, 0);
-    lv_obj_align(logo_button, LV_ALIGN_CENTER, 0, 50);
-    lv_obj_add_event_cb(logo_button, twingo_click_callback, LV_EVENT_CLICKED, NULL);
-
-    // Add current music
-
-    static lv_style_t label_style;
-
-    lv_style_init(&label_style);
-    lv_style_set_text_color(&label_style, COLOR);
-    lv_style_set_text_font(&label_style, &lv_font_montserrat_28);
-
-    music_title_label = lv_label_create(lv_screen_active());
-
-    lv_obj_set_height(music_title_label, 30);
-    lv_label_set_long_mode(music_title_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_add_style(music_title_label, &label_style, 0);
-    lv_label_set_text(music_title_label, "");
-
-    music_artist_label = lv_label_create(lv_screen_active());
-
-    lv_obj_set_height(music_artist_label, 30);
-    lv_label_set_long_mode(music_artist_label, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_add_style(music_artist_label, &label_style, 0);
-    lv_obj_set_style_transform_scale(music_artist_label, 80 * 255 / 100, LV_PART_MAIN);
-    lv_label_set_text(music_artist_label, "");
-
-    // Add cover image
-
-    cover_img = lv_img_create(inner_scale);
-
-    lv_obj_set_style_img_recolor(cover_img, COLOR, 0);
-
-    // Add bluetooth label
-
-    bluetooth_label = lv_label_create(lv_screen_active());
-
-    lv_obj_align(bluetooth_label, LV_ALIGN_TOP_LEFT, 20, 20);
-    lv_obj_add_style(bluetooth_label, &label_style, 0);
-    lv_label_set_text(bluetooth_label, "");
-
-    if (DEVELOP) {
-      lv_arc_set_value(indic, 5500);
-    }
-
+    ui_create_main_screen();
+    ui_create_menu_screen();
+    lv_screen_load(main_screen);
     lvgl_port_unlock();
   }
 }
@@ -316,6 +393,29 @@ esp_err_t ui_init_lvgl(void) {
   return ESP_OK;
 }
 
+bool ui_lock() {
+  return lvgl_port_lock(-1);
+}
+
+void ui_on_click_logo() {
+  lv_screen_load(menu_screen);
+}
+
+void ui_on_menu_button_click(lv_event_t *event) {
+  lv_obj_t *obj = lv_event_get_target_obj(event);
+  uint32_t id = lv_buttonmatrix_get_selected_button(obj);
+
+  switch (id) {
+    case 0:
+      lv_screen_load(main_screen);
+      break;
+
+    case 1:
+      esp_restart();
+      break;
+  }
+}
+
 void ui_set_bluetooth_state(bool enabled) {
   if (lvgl_port_lock(-1)) {
     if (enabled) {
@@ -349,20 +449,7 @@ void ui_set_current_music(char *current_music) {
 void ui_set_music_cover(uint8_t *music_cover_map) {
   ESP_LOGI(TAG, "Set current music: %s - %s", music_artist, music_title);
 
-  const lv_draw_buf_t music_cover = {
-    .header =
-      {
-        .magic = LV_IMAGE_HEADER_MAGIC,
-        .cf = LV_COLOR_FORMAT_A8,
-        .flags = LV_IMAGE_FLAGS_MODIFIABLE,
-        .w = 64,
-        .h = 64,
-        .stride = 64,
-        .reserved_2 = 0,
-      },
-    .data_size = 4096,
-    .data = music_cover_map
-  };
+  music_cover.data = music_cover_map;
 
   lv_point_t label_size;
 
@@ -387,15 +474,16 @@ void ui_set_music_cover(uint8_t *music_cover_map) {
   lv_obj_align(music_artist_label, LV_ALIGN_BOTTOM_MID, left, -21);
   lv_label_set_text(music_title_label, music_title);
   lv_label_set_text(music_artist_label, music_artist);
-  lv_obj_clear_flag(cover_img, LV_OBJ_FLAG_HIDDEN);
-  lv_img_set_src(cover_img, &music_cover);
+  lv_obj_remove_flag(cover_img, LV_OBJ_FLAG_HIDDEN);
+  lv_image_set_src(cover_img, &music_cover);
   lv_obj_align_to(cover_img, music_title_label, LV_ALIGN_OUT_LEFT_MID, -15, 15);
   lvgl_port_unlock();
 }
 
 void ui_set_rpm(uint16_t rpm) {
-  if (lvgl_port_lock(-1)) {
-    lv_arc_set_value(indic, rpm);
-    lvgl_port_unlock();
-  }
+  lv_arc_set_value(indic, rpm);
+}
+
+void ui_unlock() {
+  lvgl_port_unlock();
 }

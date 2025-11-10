@@ -6,21 +6,11 @@
 #include "ui.h"
 #include <lvgl.h>
 
+#define DEVELOP 0
 #define TAG "ECU"
 
 const int BLE_CHECK_PERIOD_MS = 5000;
 const int RPM_READ_PERIOD_MS = 100;
-
-bool is_backlight_on = true;
-
-void handle_twingo_click() {
-  if (is_backlight_on) {
-    lcd_backlight_on();
-  } else {
-    lcd_backlight_off();
-  }
-  is_backlight_on = !is_backlight_on;
-}
 
 void read_rpm() {
   uint8_t *buffer = (uint8_t *)malloc(2);
@@ -50,9 +40,14 @@ void app_main() {
 
   ESP_LOGI(TAG, "Initialize UI");
   lcd_backlight_off();
-  ui_init(handle_twingo_click);
+  ui_init();
   vTaskDelay(200 / portTICK_PERIOD_MS);
   lcd_backlight_on();
+
+  if (DEVELOP && ui_lock()) {
+    ui_set_rpm(5500);
+    ui_unlock();
+  }
 
   ESP_LOGI(TAG, "Initialize BLE");
   ble_init(ui_set_bluetooth_state, ui_set_current_music, ui_set_music_cover);
@@ -74,17 +69,23 @@ void app_main() {
 
   while (true) {
     if (xTaskCheckForTimeOut(&rpm_timeout, &rpm_ticks) == pdTRUE) {
-      if (tachometer_found) {
-        read_rpm();
-      } else if (i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
-        tachometer_found = true;
-        ESP_LOGI(TAG, "Tachometer device found");
+      if (ui_lock()) {
+        if (tachometer_found) {
+          read_rpm();
+        } else if (i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
+          tachometer_found = true;
+          ESP_LOGI(TAG, "Tachometer device found");
+        }
+        ui_unlock();
       }
       rpm_ticks = pdMS_TO_TICKS(RPM_READ_PERIOD_MS);
     }
 
     if (xTaskCheckForTimeOut(&ble_check_timeout, &ble_check_ticks) == pdTRUE) {
-      ble_check_connection();
+      if (ui_lock()) {
+        ble_check_connection();
+        ui_unlock();
+      }
       ble_check_ticks = pdMS_TO_TICKS(BLE_CHECK_PERIOD_MS);
     }
   }
