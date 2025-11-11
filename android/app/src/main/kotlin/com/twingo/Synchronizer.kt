@@ -87,6 +87,7 @@ class Synchronizer : Service() {
     }
     private var connectedDevice: BluetoothDevice? = null
     private var currentLatLng: String? = null
+    private var currentSpeedLimit: String? = null
     private var currentTitle: String? = null
     private var gattServer: BluetoothGattServer? = null
     private var handler: Handler? = null
@@ -130,10 +131,8 @@ class Synchronizer : Service() {
                 connectedDevice = device
                 log("Central has connected", LogLevel.INFO)
                 log("Device address: ${device.address}")
-                handler?.removeCallbacksAndMessages(null)
-                currentLatLng = null
+                stopAllTasks()
                 stopAdvertising()
-                unregisterMediaController()
                 handler?.postDelayed(
                     registerMediaControllerTask, DEVICE_GATT_INIT_PERIOD_MS.toLong()
                 )
@@ -143,9 +142,7 @@ class Synchronizer : Service() {
                 connectedDevice = null
                 log("Central has disconnected", LogLevel.INFO)
                 log("Device address: ${device.address}")
-                handler?.removeCallbacksAndMessages(null)
-                currentLatLng = null
-                unregisterMediaController()
+                stopAllTasks()
                 startAdvertising()
                 sendState(STATE_CENTRAL_DISCONNECTED)
                 handler?.postDelayed(restartGattServerTask, RESTART_GATT_SERVER_DELAY_MS.toLong())
@@ -221,19 +218,27 @@ class Synchronizer : Service() {
 
                                 if (!elements.isEmpty()) {
                                     val tags = elements[0].jsonObject.getValue("tags").jsonObject
-                                    val maxSpeed = tags.getValue("maxspeed").jsonPrimitive.content
+                                    val speedLimit = tags.getValue("maxspeed").jsonPrimitive.content
 
-                                    log("Max speed: $maxSpeed", LogLevel.VERBOSE)
-                                    sendNotification(
-                                        UUID_CHARACTERISTIC_SPEED_LIMIT,
-                                        maxSpeed.toByteArray(Charsets.UTF_8)
-                                    )
+                                    if (currentSpeedLimit != speedLimit) {
+                                        currentSpeedLimit = speedLimit
+
+                                        log("Speed limit changed: $speedLimit", LogLevel.VERBOSE)
+                                        sendNotification(
+                                            UUID_CHARACTERISTIC_SPEED_LIMIT,
+                                            speedLimit.toByteArray(Charsets.UTF_8)
+                                        )
+                                    }
                                 } else {
                                     log("No max speed found", LogLevel.VERBOSE)
-                                    sendNotification(
-                                        UUID_CHARACTERISTIC_SPEED_LIMIT,
-                                        "".toByteArray(Charsets.UTF_8)
-                                    )
+
+                                    if (currentSpeedLimit != null) {
+                                        currentSpeedLimit = null
+                                        sendNotification(
+                                            UUID_CHARACTERISTIC_SPEED_LIMIT,
+                                            "".toByteArray(Charsets.UTF_8)
+                                        )
+                                    }
                                 }
                             },
                             { error ->
@@ -255,7 +260,8 @@ class Synchronizer : Service() {
                 } else {
                     log("Unable to get current location", LogLevel.VERBOSE)
 
-                    if (currentLatLng != null) {
+                    if (currentSpeedLimit != null) {
+                        currentSpeedLimit = null
                         sendNotification(
                             UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
                         )
@@ -340,9 +346,7 @@ class Synchronizer : Service() {
     }
 
     override fun onDestroy() {
-        handler?.removeCallbacksAndMessages(null)
-        currentLatLng = null
-        unregisterMediaController()
+        stopAllTasks()
         stopAdvertising()
         stopGattServer()
     }
@@ -399,9 +403,7 @@ class Synchronizer : Service() {
 
     fun restartGattServer() {
         log("Restart GATT server", LogLevel.INFO)
-        handler?.removeCallbacksAndMessages(null)
-        currentLatLng = null
-        unregisterMediaController()
+        stopAllTasks()
         stopAdvertising()
         stopGattServer()
         startGattServer()
@@ -585,6 +587,16 @@ class Synchronizer : Service() {
         }
     }
 
+    private fun stopAllTasks() {
+        log("Stop all tasks")
+        handler?.removeCallbacksAndMessages(null)
+        mediaController?.unregisterCallback(mediaControllerCallback)
+        currentLatLng = null
+        currentSpeedLimit = null
+        currentTitle = null
+        mediaController = null
+    }
+
     private fun stopGattServer() {
         if (gattServer != null) {
             log("Stop GATT server")
@@ -594,12 +606,5 @@ class Synchronizer : Service() {
         } else {
             log("Cannot stop GATT server: not running", LogLevel.WARNING)
         }
-    }
-
-    private fun unregisterMediaController() {
-        log("Unregister media controller")
-        mediaController?.unregisterCallback(mediaControllerCallback)
-        currentTitle = null
-        mediaController = null
     }
 }
