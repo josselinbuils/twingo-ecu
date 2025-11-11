@@ -206,9 +206,9 @@ class Synchronizer : Service() {
                     val latLng = "${location.latitude},${location.longitude}"
 
                     if (currentLatLng != latLng) {
-                        currentLatLng = latLng
-
                         log("Location changed: $latLng", LogLevel.VERBOSE)
+
+                        currentLatLng = latLng
 
                         val request = StringRequest(
                             "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:3000];way(around:5,$latLng)[maxspeed];out;")}",
@@ -221,16 +221,16 @@ class Synchronizer : Service() {
                                     val speedLimit = tags.getValue("maxspeed").jsonPrimitive.content
 
                                     if (currentSpeedLimit != speedLimit) {
-                                        currentSpeedLimit = speedLimit
-
                                         log("Speed limit changed: $speedLimit", LogLevel.VERBOSE)
+
+                                        currentSpeedLimit = speedLimit
                                         sendNotification(
                                             UUID_CHARACTERISTIC_SPEED_LIMIT,
                                             speedLimit.toByteArray(Charsets.UTF_8)
                                         )
                                     }
                                 } else {
-                                    log("No max speed found", LogLevel.VERBOSE)
+                                    log("No speed limit found", LogLevel.VERBOSE)
 
                                     if (currentSpeedLimit != null) {
                                         currentSpeedLimit = null
