@@ -375,7 +375,7 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_NETWORK_STATE,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE,
+            Manifest.permission.FOREGROUND_SERVICE_LOCATION,
             Manifest.permission.INTERNET,
             Manifest.permission.POST_NOTIFICATIONS
         )

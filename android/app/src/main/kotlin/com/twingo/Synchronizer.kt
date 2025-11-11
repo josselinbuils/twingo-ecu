@@ -17,7 +17,7 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
 import android.graphics.Bitmap
 import android.location.LocationManager
 import android.media.MediaMetadata
@@ -46,7 +46,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.charset.StandardCharsets
-import java.util.function.Consumer
 
 private const val DEBUG = false
 private const val DEVICE_GATT_INIT_PERIOD_MS = 5000
@@ -311,7 +310,7 @@ class Synchronizer : Service() {
             .setDeleteIntent(cancelPendingIntent)
             .build()
 
-        startForeground(1, notification, FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        startForeground(1, notification, FOREGROUND_SERVICE_TYPE_LOCATION)
 
         handler = Handler(Looper.getMainLooper())
         requestQueue = Volley.newRequestQueue(this)
