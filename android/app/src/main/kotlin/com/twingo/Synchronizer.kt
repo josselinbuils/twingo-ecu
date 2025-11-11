@@ -86,6 +86,7 @@ class Synchronizer : Service() {
         getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
     }
     private var connectedDevice: BluetoothDevice? = null
+    private var currentLatLng: String? = null
     private var currentTitle: String? = null
     private var gattServer: BluetoothGattServer? = null
     private var handler: Handler? = null
@@ -129,10 +130,9 @@ class Synchronizer : Service() {
                 connectedDevice = device
                 log("Central has connected", LogLevel.INFO)
                 log("Device address: ${device.address}")
-
-                handler?.removeCallbacks(restartGattServerTask)
-                stopAdvertising()
                 handler?.removeCallbacksAndMessages(null)
+                currentLatLng = null
+                stopAdvertising()
                 unregisterMediaController()
                 handler?.postDelayed(
                     registerMediaControllerTask, DEVICE_GATT_INIT_PERIOD_MS.toLong()
@@ -144,6 +144,7 @@ class Synchronizer : Service() {
                 log("Central has disconnected", LogLevel.INFO)
                 log("Device address: ${device.address}")
                 handler?.removeCallbacksAndMessages(null)
+                currentLatLng = null
                 unregisterMediaController()
                 startAdvertising()
                 sendState(STATE_CENTRAL_DISCONNECTED)
@@ -195,6 +196,8 @@ class Synchronizer : Service() {
     }
 
     private val refreshLocationTask: Runnable = Runnable {
+        log("Refresh location", LogLevel.VERBOSE)
+
         val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
 
         locationManager.getCurrentLocation(
@@ -203,44 +206,61 @@ class Synchronizer : Service() {
             application.mainExecutor,
             { location ->
                 if (location != null) {
-                    log("Location: ${location.latitude}, ${location.longitude}", LogLevel.VERBOSE)
+                    val latLng = "${location.latitude},${location.longitude}"
 
-                    val request = StringRequest(
-                        "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:3000];way(around:5,${location.latitude}, ${location.longitude})[maxspeed];out;")}",
-                        { response ->
-                            val jsonObject = Json.parseToJsonElement(response).jsonObject
-                            val elements = jsonObject.getValue("elements").jsonArray
+                    if (currentLatLng != latLng) {
+                        currentLatLng = latLng
 
-                            if (!elements.isEmpty()) {
-                                val tags = elements[0].jsonObject.getValue("tags").jsonObject
-                                val maxSpeed = tags.getValue("maxspeed").jsonPrimitive.content
+                        log("Location changed: $latLng", LogLevel.VERBOSE)
 
-                                log("Max speed: $maxSpeed", LogLevel.VERBOSE)
-                                sendNotification(
-                                    UUID_CHARACTERISTIC_SPEED_LIMIT,
-                                    maxSpeed.toByteArray(Charsets.UTF_8)
-                                )
-                            } else {
-                                log("No max speed found", LogLevel.VERBOSE)
-                                sendNotification(
-                                    UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
-                                )
+                        val request = StringRequest(
+                            "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:3000];way(around:5,$latLng)[maxspeed];out;")}",
+                            { response ->
+                                val jsonObject = Json.parseToJsonElement(response).jsonObject
+                                val elements = jsonObject.getValue("elements").jsonArray
+
+                                if (!elements.isEmpty()) {
+                                    val tags = elements[0].jsonObject.getValue("tags").jsonObject
+                                    val maxSpeed = tags.getValue("maxspeed").jsonPrimitive.content
+
+                                    log("Max speed: $maxSpeed", LogLevel.VERBOSE)
+                                    sendNotification(
+                                        UUID_CHARACTERISTIC_SPEED_LIMIT,
+                                        maxSpeed.toByteArray(Charsets.UTF_8)
+                                    )
+                                } else {
+                                    log("No max speed found", LogLevel.VERBOSE)
+                                    sendNotification(
+                                        UUID_CHARACTERISTIC_SPEED_LIMIT,
+                                        "".toByteArray(Charsets.UTF_8)
+                                    )
+                                }
+                            },
+                            { error ->
+                                val statusCode = error?.networkResponse?.statusCode
+
+                                if (statusCode != null && statusCode != 504) {
+                                    val statusText =
+                                        String(error.networkResponse.data, StandardCharsets.UTF_8)
+
+                                    log(
+                                        "Overpass API error: $statusCode $statusText",
+                                        LogLevel.ERROR
+                                    )
+                                }
                             }
-                        },
-                        { error ->
-                            val statusCode = error.networkResponse.statusCode
-
-                            if (statusCode != 504) {
-                                val statusText =
-                                    String(error.networkResponse.data, StandardCharsets.UTF_8)
-
-                                log("Overpass API error: $statusCode $statusText", LogLevel.ERROR)
-                            }
-                        }
-                    )
-                    requestQueue?.add(request)
+                        )
+                        requestQueue?.add(request)
+                    }
                 } else {
                     log("Unable to get current location", LogLevel.VERBOSE)
+
+                    if (currentLatLng != null) {
+                        sendNotification(
+                            UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
+                        )
+                    }
+                    currentLatLng = null
                 }
             }
         )
@@ -321,6 +341,7 @@ class Synchronizer : Service() {
 
     override fun onDestroy() {
         handler?.removeCallbacksAndMessages(null)
+        currentLatLng = null
         unregisterMediaController()
         stopAdvertising()
         stopGattServer()
@@ -379,6 +400,7 @@ class Synchronizer : Service() {
     fun restartGattServer() {
         log("Restart GATT server", LogLevel.INFO)
         handler?.removeCallbacksAndMessages(null)
+        currentLatLng = null
         unregisterMediaController()
         stopAdvertising()
         stopGattServer()
