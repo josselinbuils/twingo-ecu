@@ -253,6 +253,7 @@ class Synchronizer : Service() {
                                         LogLevel.ERROR
                                     )
                                 }
+                                currentLatLng = null
                             }
                         )
                         requestQueue?.add(request)
