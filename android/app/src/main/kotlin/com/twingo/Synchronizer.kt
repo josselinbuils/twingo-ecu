@@ -227,7 +227,7 @@ class Synchronizer : Service() {
 
                 if (speedLimit != null) {
                     if (currentSpeedLimit != speedLimit) {
-                        log("Speed limit changed: $speedLimit", LogLevel.DEBUG)
+                        log("Speed limit changed: $speedLimit")
 
                         currentSpeedLimit = speedLimit
 
@@ -238,7 +238,7 @@ class Synchronizer : Service() {
                     }
                 } else {
                     if (currentSpeedLimit != null) {
-                        log("No speed limit found", LogLevel.DEBUG)
+                        log("No speed limit found")
                         currentSpeedLimit = null
                         sendNotification(
                             UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
