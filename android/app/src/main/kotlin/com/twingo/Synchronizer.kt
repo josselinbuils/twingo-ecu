@@ -36,21 +36,27 @@ import androidx.core.graphics.set
 import com.android.volley.RequestQueue
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
+import com.twingo.lib.LatLng
 import com.twingo.lib.LogLevel
+import com.twingo.lib.OverpassWay
 import java.text.Normalizer
 import java.util.UUID
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 
 private const val DEBUG = false
 private const val DEVICE_GATT_INIT_PERIOD_MS = 5000
+private const val DISTANCE_THRESHOLD_METERS = 5
 private const val NOTIFICATION_CHANNEL_ID = "com.twingo.synchronizer.NOTIFICATION_CHANNEL_ID"
-private const val REFRESH_LOCATION_PERIOD_MS = 10000
+private const val REFRESH_LOCATION_PERIOD_MS = 2000
+private const val REFRESH_WAYS_PERIOD_MS = 10000
 private const val REGISTER_CONTROLLER_PERIOD_MS = 10000
 private const val RESTART_GATT_SERVER_DELAY_MS = 20000
 
@@ -86,16 +92,19 @@ class Synchronizer : Service() {
         getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
     }
     private var connectedDevice: BluetoothDevice? = null
-    private var currentLatLng: String? = null
+    private var currentLocation: LatLng? = null
     private var currentSpeedLimit: String? = null
     private var currentTitle: String? = null
     private var gattServer: BluetoothGattServer? = null
     private var handler: Handler? = null
     private val instance = this
     private var isAdvertising = false
+
+    private var lastUpdateTimeMs = 0.toLong()
     private var mediaController: MediaController? = null
     private var mtu = 512
     private var requestQueue: RequestQueue? = null
+    private var ways = listOf<OverpassWay>()
 
     private val advertiseSettings =
         AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
@@ -158,11 +167,7 @@ class Synchronizer : Service() {
             if (characteristic.uuid == UUID.fromString(UUID_CHARACTERISTIC_PING)) {
                 log("Ping received", LogLevel.VERBOSE)
                 gattServer?.sendResponse(
-                    device,
-                    requestId,
-                    BluetoothGatt.GATT_SUCCESS,
-                    0,
-                    byteArrayOf(1)
+                    device, requestId, BluetoothGatt.GATT_SUCCESS, 0, byteArrayOf(1)
                 )
             }
         }
@@ -193,84 +198,72 @@ class Synchronizer : Service() {
     }
 
     private val refreshLocationTask: Runnable = Runnable {
-        log("Refresh location", LogLevel.VERBOSE)
-
         val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
 
         locationManager.getCurrentLocation(
-            LocationManager.GPS_PROVIDER,
-            null,
-            application.mainExecutor,
-            { location ->
-                if (location != null) {
-                    val latLng = "${location.latitude},${location.longitude}"
+            LocationManager.GPS_PROVIDER, null, application.mainExecutor
+        ) { location ->
+            if (location != null) {
+                val latLng = LatLng(location.latitude, location.longitude)
 
-                    if (currentLatLng != latLng) {
-                        log("Location changed: $latLng", LogLevel.VERBOSE)
+                if (currentLocation?.equals(latLng) != true) {
+                    currentLocation = latLng
+                }
 
-                        currentLatLng = latLng
+                var closestWay: OverpassWay? = null
+                var closestWayDistance = Double.MAX_VALUE
 
-                        val request = StringRequest(
-                            "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:3000];way(around:5,$latLng)[maxspeed];out;")}",
-                            { response ->
-                                val jsonObject = Json.parseToJsonElement(response).jsonObject
-                                val elements = jsonObject.getValue("elements").jsonArray
+                ways.forEach { way ->
+                    val distance = way.getDistanceToPoint(latLng)
 
-                                if (!elements.isEmpty()) {
-                                    val tags = elements[0].jsonObject.getValue("tags").jsonObject
-                                    val speedLimit = tags.getValue("maxspeed").jsonPrimitive.content
+                    if (distance < closestWayDistance) {
+                        closestWay = way
+                        closestWayDistance = distance
+                    }
+                }
 
-                                    if (currentSpeedLimit != speedLimit) {
-                                        log("Speed limit changed: $speedLimit", LogLevel.VERBOSE)
+                val speedLimit =
+                    if (closestWayDistance <= DISTANCE_THRESHOLD_METERS) closestWay?.speedLimit else null
 
-                                        currentSpeedLimit = speedLimit
-                                        sendNotification(
-                                            UUID_CHARACTERISTIC_SPEED_LIMIT,
-                                            speedLimit.toByteArray(Charsets.UTF_8)
-                                        )
-                                    }
-                                } else {
-                                    log("No speed limit found", LogLevel.VERBOSE)
+                if (speedLimit != null) {
+                    if (currentSpeedLimit != speedLimit) {
+                        log("Speed limit changed: $speedLimit", LogLevel.DEBUG)
 
-                                    if (currentSpeedLimit != null) {
-                                        currentSpeedLimit = null
-                                        sendNotification(
-                                            UUID_CHARACTERISTIC_SPEED_LIMIT,
-                                            "".toByteArray(Charsets.UTF_8)
-                                        )
-                                    }
-                                }
-                            },
-                            { error ->
-                                val statusCode = error?.networkResponse?.statusCode
+                        currentSpeedLimit = speedLimit
 
-                                if (statusCode != null && statusCode != 504) {
-                                    val statusText =
-                                        String(error.networkResponse.data, StandardCharsets.UTF_8)
-
-                                    log(
-                                        "Overpass API error: $statusCode $statusText",
-                                        LogLevel.ERROR
-                                    )
-                                }
-                                currentLatLng = null
-                            }
+                        sendNotification(
+                            UUID_CHARACTERISTIC_SPEED_LIMIT,
+                            speedLimit.toByteArray(Charsets.UTF_8)
                         )
-                        requestQueue?.add(request)
                     }
                 } else {
-                    log("Unable to get current location", LogLevel.VERBOSE)
-
                     if (currentSpeedLimit != null) {
+                        log("No speed limit found", LogLevel.DEBUG)
                         currentSpeedLimit = null
                         sendNotification(
                             UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
                         )
                     }
-                    currentLatLng = null
+
+                    val timeMs = Instant.now().toEpochMilli()
+
+                    if ((timeMs - lastUpdateTimeMs) > REFRESH_WAYS_PERIOD_MS) {
+                        lastUpdateTimeMs = timeMs
+                        updateWays()
+                    }
                 }
+            } else {
+                log("Unable to get current location", LogLevel.ERROR)
+
+                if (currentSpeedLimit != null) {
+                    currentSpeedLimit = null
+                    sendNotification(
+                        UUID_CHARACTERISTIC_SPEED_LIMIT, "".toByteArray(Charsets.UTF_8)
+                    )
+                }
+                currentLocation = null
             }
-        )
+        }
         handler?.postDelayed(refreshLocationTask, REFRESH_LOCATION_PERIOD_MS.toLong())
     }
 
@@ -323,19 +316,14 @@ class Synchronizer : Service() {
         val restartPendingIntent =
             PendingIntent.getBroadcast(this, 0, restartIntent, PendingIntent.FLAG_IMMUTABLE)
 
-        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setOngoing(true)
-            .setSmallIcon(R.mipmap.ic_launcher_round)
-            .setContentTitle("Twingo")
-            .setContentText("Foreground service running")
-            .addAction(
-                R.mipmap.ic_launcher_round,
-                getString(R.string.button_restart),
-                restartPendingIntent
-            )
-            .setContentIntent(clickPendingIntent)
-            .setDeleteIntent(cancelPendingIntent)
-            .build()
+        val notification =
+            NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID).setOngoing(true)
+                .setSmallIcon(R.mipmap.ic_launcher_round).setContentTitle("Twingo")
+                .setContentText("Foreground service running").addAction(
+                    R.mipmap.ic_launcher_round,
+                    getString(R.string.button_restart),
+                    restartPendingIntent
+                ).setContentIntent(clickPendingIntent).setDeleteIntent(cancelPendingIntent).build()
 
         startForeground(1, notification, FOREGROUND_SERVICE_TYPE_LOCATION)
 
@@ -592,10 +580,11 @@ class Synchronizer : Service() {
         log("Stop all tasks")
         handler?.removeCallbacksAndMessages(null)
         mediaController?.unregisterCallback(mediaControllerCallback)
-        currentLatLng = null
+        currentLocation = null
         currentSpeedLimit = null
         currentTitle = null
         mediaController = null
+        ways = emptyList()
     }
 
     private fun stopGattServer() {
@@ -607,5 +596,76 @@ class Synchronizer : Service() {
         } else {
             log("Cannot stop GATT server: not running", LogLevel.WARNING)
         }
+    }
+
+    private fun updateWays() {
+        log("Update ways", LogLevel.VERBOSE)
+
+        val position = currentLocation
+
+        if (position == null) {
+            log("Cannot update ways: no current position", LogLevel.ERROR)
+            return
+        }
+
+        val request = StringRequest(
+            "https://overpass-api.de/api/interpreter?data=${Uri.encode("[out:json][timeout:5000];way(around:100,${position.lat},${position.lng})[maxspeed];out;node(w);out skel;")}",
+            { response ->
+                val jsonObject = Json.parseToJsonElement(response).jsonObject
+                val elements = jsonObject.getValue("elements").jsonArray
+                val wayElements = mutableListOf<JsonElement>()
+                val nodeElements = mutableListOf<JsonElement>()
+
+                for (element in elements) {
+                    val type = element.jsonObject.getValue("type").jsonPrimitive.content
+
+                    if (type == "way") {
+                        wayElements.add(element)
+                    } else if (type == "node") {
+                        nodeElements.add(element)
+                    }
+                }
+
+                ways = wayElements.map { wayElement ->
+                    val nodeIds = wayElement.jsonObject.getValue("nodes").jsonArray
+                    val tags = wayElement.jsonObject.getValue("tags").jsonObject
+                    val name = tags.getOrDefault("name", null)?.jsonPrimitive?.content
+                    val ref = tags.getOrDefault("ref", null)?.jsonPrimitive?.content
+                    val speedLimit = tags.getValue("maxspeed").jsonPrimitive.content
+                    val nodes = mutableListOf<LatLng>()
+
+                    for (nodeId in nodeIds) {
+                        val nodeElement = nodeElements.find { element ->
+                            element.jsonObject.getValue("id").jsonPrimitive.content == nodeId.jsonPrimitive.content
+                        }
+                        if (nodeElement != null) {
+                            val latLng = LatLng(
+                                nodeElement.jsonObject.getValue("lat").jsonPrimitive.content.toDouble(),
+                                nodeElement.jsonObject.getValue("lon").jsonPrimitive.content.toDouble()
+                            )
+                            nodes.add(latLng)
+                        } else {
+                            throw Exception("Node not found")
+                        }
+                    }
+                    OverpassWay(name ?: ref ?: "unknown", speedLimit, nodes)
+                }
+
+                log("Found ${ways.size} ways around", LogLevel.VERBOSE)
+            },
+            { error ->
+                val statusCode = error?.networkResponse?.statusCode
+
+                if (statusCode != null) {
+                    val statusText =
+                        if (statusCode != 504)
+                            String(error.networkResponse.data, StandardCharsets.UTF_8)
+                        else ""
+
+                    log("Overpass API error: $statusCode $statusText", LogLevel.WARNING)
+                }
+                lastUpdateTimeMs = 0 // Retry soon
+            })
+        requestQueue?.add(request)
     }
 }

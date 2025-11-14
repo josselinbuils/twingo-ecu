@@ -434,12 +434,13 @@ class MainActivity : AppCompatActivity() {
             persistLog(log)
 
             if (session == CURRENT_SESSION && log.level.ordinal >= logLevel.ordinal) {
+                if (!scrollViewLog.canScrollVertically(1)) {
+                    // scroll after delay, because textView has to be updated first
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        scrollViewLog.fullScroll(View.FOCUS_DOWN)
+                    }, 16)
+                }
                 appendLog(log)
-
-                // scroll after delay, because textView has to be updated first
-                Handler(Looper.getMainLooper()).postDelayed({
-                    scrollViewLog.fullScroll(View.FOCUS_DOWN)
-                }, 16)
             }
         }
     }

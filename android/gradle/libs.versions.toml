@@ -1,5 +1,6 @@
 [versions]
 agp = "8.13.1"
+commonsMath3 = "3.6.1"
 constraintlayout = "2.2.1"
 coreKtx = "1.17.0"
 kotlin = "2.2.21"
@@ -12,6 +13,7 @@ volley = "1.2.1"
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+commons-math3 = { group = "org.apache.commons", name = "commons-math3", version.ref = "commonsMath3"}
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlixSerialization" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 volley = { group = "com.android.volley", name = "volley", version.ref = "volley" }

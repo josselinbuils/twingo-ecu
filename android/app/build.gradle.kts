@@ -39,6 +39,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.commons.math3)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.material)
     implementation(libs.volley)
