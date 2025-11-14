@@ -49,8 +49,12 @@ void app_main() {
     ui_unlock();
   }
 
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+
   ESP_LOGI(TAG, "Initialize BLE");
   ble_init(ui_set_bluetooth_state, ui_set_current_music, ui_set_music_cover, ui_set_speed_limit);
+
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
 
   if (!i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
     ESP_LOGI(TAG, "Wait for tachometer device...");
