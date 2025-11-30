@@ -4,6 +4,7 @@
 #include "i2c.h"
 #include "lcd.h"
 #include "ui.h"
+#include <sys/time.h>
 #include <lvgl.h>
 
 #define DEVELOP 0
@@ -28,6 +29,12 @@ void read_rpm() {
   free(buffer);
 }
 
+unsigned long get_time_ms() {
+  struct timeval time;
+  gettimeofday(&time, NULL);
+  return time.tv_sec * 1000 + time.tv_usec / 1000;
+}
+
 void app_main() {
   ESP_LOGI(TAG, "Initialize I2C");
   ESP_ERROR_CHECK(i2c_init());
@@ -49,48 +56,32 @@ void app_main() {
     ui_unlock();
   }
 
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
-
   ESP_LOGI(TAG, "Initialize BLE");
   ble_init(ui_set_bluetooth_state, ui_set_current_music, ui_set_music_cover, ui_set_speed_limit);
 
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-  if (!i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
-    ESP_LOGI(TAG, "Wait for tachometer device...");
-  }
-
   bool tachometer_found = false;
 
-  TimeOut_t ble_check_timeout;
-  TickType_t ble_check_ticks = pdMS_TO_TICKS(BLE_CHECK_PERIOD_MS);
-
-  TimeOut_t rpm_timeout;
-  TickType_t rpm_ticks = pdMS_TO_TICKS(RPM_READ_PERIOD_MS);
-
-  vTaskSetTimeOutState(&ble_check_timeout);
-  vTaskSetTimeOutState(&rpm_timeout);
+  unsigned long last_ble_check_time_ms = 0;
+  unsigned long last_rpm_read_time_ms = 0;
+  unsigned long now_ms = 0;
 
   while (true) {
-    if (xTaskCheckForTimeOut(&rpm_timeout, &rpm_ticks) == pdTRUE) {
-      if (ui_lock()) {
-        if (tachometer_found) {
-          read_rpm();
-        } else if (i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
-          tachometer_found = true;
-          ESP_LOGI(TAG, "Tachometer device found");
-        }
-        ui_unlock();
+    now_ms = get_time_ms();
+
+    if ((now_ms - last_rpm_read_time_ms) >= RPM_READ_PERIOD_MS) {
+      last_rpm_read_time_ms = now_ms;
+
+      if (tachometer_found) {
+        read_rpm();
+      } else if (i2c_check_device(I2C_NUM_0, TACHOMETER_I2C_ADDRESS)) {
+        tachometer_found = true;
+        ESP_LOGI(TAG, "Tachometer device found");
       }
-      rpm_ticks = pdMS_TO_TICKS(RPM_READ_PERIOD_MS);
     }
 
-    if (xTaskCheckForTimeOut(&ble_check_timeout, &ble_check_ticks) == pdTRUE) {
-      if (ui_lock()) {
-        ble_check_connection();
-        ui_unlock();
-      }
-      ble_check_ticks = pdMS_TO_TICKS(BLE_CHECK_PERIOD_MS);
+    if ((now_ms - last_ble_check_time_ms) >= BLE_CHECK_PERIOD_MS) {
+      last_ble_check_time_ms = now_ms;
+      ble_check_connection();
     }
   }
 }

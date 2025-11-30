@@ -520,7 +520,10 @@ void ui_set_music_cover(uint8_t *music_cover_map) {
 }
 
 void ui_set_rpm(uint16_t rpm) {
-  lv_arc_set_value(indic, rpm);
+  if (lvgl_port_lock(-1)) {
+    lv_arc_set_value(indic, rpm);
+    lvgl_port_unlock();
+  }
 }
 
 void ui_set_speed_limit(char *speed_limit) {
