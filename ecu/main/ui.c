@@ -242,7 +242,7 @@ void ui_create_main_screen() {
   lv_obj_set_height(music_artist_label, 30);
   lv_label_set_long_mode(music_artist_label, LV_LABEL_LONG_MODE_DOTS);
   lv_obj_add_style(music_artist_label, &label_style, 0);
-  lv_obj_set_style_transform_scale(music_artist_label, 80 * 255 / 100, LV_PART_MAIN);
+  lv_obj_set_style_transform_scale(music_artist_label, 90 * 255 / 100, LV_PART_MAIN);
   lv_label_set_text(music_artist_label, "");
 
   // Add cover image
