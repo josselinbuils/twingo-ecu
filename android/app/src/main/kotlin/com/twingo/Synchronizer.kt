@@ -207,6 +207,7 @@ class Synchronizer : Service() {
                 val latLng = LatLng(location.latitude, location.longitude)
 
                 if (currentLocation?.equals(latLng) != true) {
+                    log("Location changed: $latLng", LogLevel.VERBOSE)
                     currentLocation = latLng
                 }
 
@@ -263,8 +264,8 @@ class Synchronizer : Service() {
                 }
                 currentLocation = null
             }
+            handler?.postDelayed(refreshLocationTask, REFRESH_LOCATION_PERIOD_MS.toLong())
         }
-        handler?.postDelayed(refreshLocationTask, REFRESH_LOCATION_PERIOD_MS.toLong())
     }
 
     private val registerMediaControllerTask: Runnable = Runnable {
