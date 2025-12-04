@@ -84,13 +84,13 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_1), handleInterrupt1, RISING);
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_2), handleInterrupt2, RISING);
 
-  delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings
-                // stored we need a high enough value in micros() so if divided is not going to give negative values.
-                // The delay allows the micros() to be high enough for the first few cycles.
-
   Wire.begin(I2C_ADDRESS);
   Wire.setClock(400000UL);
   Wire.onRequest(i2cRequestHandler);
+
+  delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings
+                // stored we need a high enough value in micros() so if divided is not going to give negative values.
+                // The delay allows the micros() to be high enough for the first few cycles.
 }
 
 void loop() {
