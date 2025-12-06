@@ -1,15 +1,14 @@
 #include <lvgl.h>
 
 #ifndef LV_ATTRIBUTE_MEM_ALIGN
-  #define LV_ATTRIBUTE_MEM_ALIGN
+#define LV_ATTRIBUTE_MEM_ALIGN
 #endif
 
 #ifndef LV_ATTRIBUTE_IMG_TWINGO_LOGO
-  #define LV_ATTRIBUTE_IMG_TWINGO_LOGO
+#define LV_ATTRIBUTE_IMG_TWINGO_LOGO
 #endif
 
-static const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_TWINGO_LOGO uint8_t
-  twingo_logo_map[] = {
+static const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_TWINGO_LOGO uint8_t twingo_logo_map[] = {
     0x00, 0x00, 0x00, 0x03, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0xff, 0x00,
@@ -387,17 +386,16 @@ static const LV_ATTRIBUTE_MEM_ALIGN LV_ATTRIBUTE_LARGE_CONST LV_ATTRIBUTE_IMG_TW
 };
 
 const lv_image_dsc_t twingo_logo = {
-  .header =
-    {
-      .magic = LV_IMAGE_HEADER_MAGIC,
-      .cf = LV_COLOR_FORMAT_A1,
-      .flags = 0,
-      .w = 330,
-      .h = 142,
-      .stride = 42,
-      .reserved_2 = 0,
+    .header = {
+        .magic = LV_IMAGE_HEADER_MAGIC,
+        .cf = LV_COLOR_FORMAT_A1,
+        .flags = 0,
+        .w = 330,
+        .h = 142,
+        .stride = 42,
+        .reserved_2 = 0,
     },
-  .data_size = sizeof(twingo_logo_map),
-  .data = twingo_logo_map,
-  .reserved = NULL
+    .data_size = sizeof(twingo_logo_map),
+    .data = twingo_logo_map,
+    .reserved = NULL
 };

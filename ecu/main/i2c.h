@@ -2,7 +2,6 @@
 #define I2C_H
 
 #include <driver/i2c.h>
-#include <esp_log.h>
 
 #define ACK_CHECK_EN 0x1
 #define ACK_VAL 0x0
@@ -20,7 +19,9 @@
 #define I2C_TIMEOUT_MS 1000
 
 bool i2c_check_device(i2c_port_t port, uint8_t address);
+
 esp_err_t i2c_init();
+
 esp_err_t i2c_master_read_slave(i2c_port_t i2c_num, uint8_t *data_rd, size_t size);
 
 #endif

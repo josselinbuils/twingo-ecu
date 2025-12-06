@@ -1,14 +1,8 @@
 #ifndef LCD_H
 #define LCD_H
 
-#include "esp_check.h"
 #include "esp_err.h"
-#include "esp_lcd_panel_ops.h"
-#include "esp_lcd_panel_rgb.h"
 #include "esp_lcd_touch_gt911.h"
-#include "esp_log.h"
-#include "i2c.h"
-#include "driver/gpio.h"
 
 // GPIO settings
 #define GPIO_INPUT_IO_4 4
@@ -60,9 +54,13 @@ extern esp_lcd_panel_handle_t lcd_panel;
 extern esp_lcd_touch_handle_t touch_handle;
 
 void gpio_init();
+
 esp_err_t lcd_init();
+
 esp_err_t lcd_backlight_on();
+
 esp_err_t lcd_backlight_off();
+
 esp_err_t lvgl_init();
 
 #endif
