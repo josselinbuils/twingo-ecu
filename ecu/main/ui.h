@@ -1,10 +1,6 @@
 #ifndef UI_H
 #define UI_H
 
-
-#define BACKGROUND_COLOR lv_color_hex(0x101200)
-#define COLOR lv_color_hex(0xa4b700)
-
 void ui_init();
 
 bool ui_lock();

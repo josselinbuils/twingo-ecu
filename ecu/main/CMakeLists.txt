@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "ble.c" "external/misc.c" "external/peer.c" "i2c.c" "lcd.c" "main.c" "twingo_logo.c" "ui.c"
+    SRCS "ble.c" "external/misc.c" "external/peer.c" "i2c.c" "lcd.c" "main.c" "ui.c" "ui/g_meter.c"  "ui/twingo_logo.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES bt nvs_flash)
 

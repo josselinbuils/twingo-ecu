@@ -1,4 +1,6 @@
 #include <lvgl.h>
+#include "colors.h"
+#include "twingo_logo.h"
 
 #ifndef LV_ATTRIBUTE_MEM_ALIGN
 #define LV_ATTRIBUTE_MEM_ALIGN
@@ -399,3 +401,14 @@ const lv_image_dsc_t twingo_logo = {
     .data = twingo_logo_map,
     .reserved = NULL
 };
+
+void ui_draw_twingo_logo(lv_obj_t *screen, void (*click_callback)()) {
+    lv_obj_t *logo_button = lv_imagebutton_create(screen);
+
+    lv_imagebutton_set_src(logo_button, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &twingo_logo, NULL);
+    lv_obj_set_style_image_recolor_opa(logo_button, LV_OPA_100, 0);
+    lv_obj_set_style_image_recolor(logo_button, COLOR, 0);
+    lv_obj_align(logo_button, LV_ALIGN_CENTER, 0, 50);
+    lv_obj_remove_flag(logo_button, LV_OBJ_FLAG_PRESS_LOCK);
+    lv_obj_add_event_cb(logo_button, *click_callback, LV_EVENT_SHORT_CLICKED, NULL);
+}

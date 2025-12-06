@@ -4,8 +4,11 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
-#include "ui.h"
 #include "lcd.h"
+#include "ui.h"
+#include "ui/colors.h"
+#include "ui/g_meter.h"
+#include "ui/twingo_logo.h"
 
 #define TAG "UI"
 
@@ -26,7 +29,6 @@ lv_indev_t *lvgl_touch_indev = NULL;
 lv_obj_t *bluetooth_label;
 lv_obj_t *cover_img;
 lv_obj_t *indic;
-lv_obj_t *logo_button;
 lv_obj_t *main_screen;
 lv_obj_t *menu_screen;
 lv_obj_t *music_artist_label;
@@ -217,15 +219,11 @@ void ui_create_main_screen() {
 
     // Add twingo logo
 
-    logo_button = lv_imagebutton_create(main_screen);
+    ui_draw_twingo_logo(main_screen, ui_on_click_logo);
 
-    LV_IMG_DECLARE(twingo_logo)
-    lv_imagebutton_set_src(logo_button, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &twingo_logo, NULL);
-    lv_obj_set_style_image_recolor_opa(logo_button, LV_OPA_100, 0);
-    lv_obj_set_style_image_recolor(logo_button, COLOR, 0);
-    lv_obj_align(logo_button, LV_ALIGN_CENTER, 0, 50);
-    lv_obj_remove_flag(logo_button, LV_OBJ_FLAG_PRESS_LOCK);
-    lv_obj_add_event_cb(logo_button, ui_on_click_logo, LV_EVENT_SHORT_CLICKED, NULL);
+    // Add accelerometer graph
+
+    // ui_draw_g_meter(main_screen);
 
     // Add current music
 
@@ -392,7 +390,6 @@ esp_err_t ui_init_lvgl(void) {
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
         .monochrome = false,
-        .color_format = LV_COLOR_FORMAT_RGB565,
         .rotation =
         {
             .swap_xy = false,
