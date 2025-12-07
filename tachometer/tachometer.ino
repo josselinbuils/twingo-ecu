@@ -4,13 +4,12 @@
  * Use work of InterlinkKnight from https://www.youtube.com/watch?v=u2uJMJWsfsg.
  */
 
+#include <Arduino_BMI270_BMM150.h>
 #include <Wire.h>
 
+const int I2C_ADDRESS = 1;
 const int INTERRUPT_PIN_1 = 2;
 const int INTERRUPT_PIN_2 = 3;
-
-const int I2C_ADDRESS = 1;
-
 const int PULSES_PER_REVOLUTION = 1;  // Set how many pulses there are on each revolution. Default: 2.
 
 // If the period between pulses is too high, or even if the pulses stopped, then we would get stuck showing the
@@ -24,8 +23,15 @@ const unsigned long ZERO_TIMEOUT = 100000;  // For high response time, a good va
                                             // For reading very low rpm, a good value would be 300000.
 
 const int NUM_RPM_READINGS = 10;  // Number of samples for smoothing. The higher, the more smoothing, but it's going to
-                                 // react slower to changes. 1 = no smoothing. Default: 2.
+                                  // react slower to changes. 1 = no smoothing. Default: 2.
 
+float xOffset = 0;
+float yOffset = 0;
+
+int8_t x = 0;
+int8_t y = 0;
+
+uint8_t bytes[4];
 
 // Sensors
 
@@ -78,15 +84,35 @@ volatile uint16_t rpmAverage = 0;               // The average rpm value between
 void setup() {
   Serial.begin(9600);
 
+  while (!Serial)
+    ;
+
+  Serial.println("Set pin modes");
+
   pinMode(INTERRUPT_PIN_1, INPUT_PULLUP);
   pinMode(INTERRUPT_PIN_2, INPUT_PULLUP);
+
+
+  Serial.println("Attach interrupts");
 
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_1), handleInterrupt1, RISING);
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_2), handleInterrupt2, RISING);
 
+  if (IMU.begin()) {
+    Serial.print("Accelerometer sample rate = ");
+    Serial.print(IMU.accelerationSampleRate());
+    Serial.println(" Hz");
+  } else {
+    Serial.println("Failed to initialize IMU!");
+  }
+
+  Serial.println("Initialize I2C");
+
   Wire.begin(I2C_ADDRESS);
-  Wire.setClock(400000UL);
+  Wire.setClock(100000UL);
   Wire.onRequest(i2cRequestHandler);
+
+  Serial.println("I2C initialized");
 
   delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings
                 // stored we need a high enough value in micros() so if divided is not going to give negative values.
@@ -138,6 +164,23 @@ void loop() {
 
   rpmAverage = (rpmAverages[0] + rpmAverages[1]) / 2;
 
+  if (IMU.accelerationAvailable()) {
+    float xRaw, yRaw, zRaw;
+
+    IMU.readAcceleration(xRaw, yRaw, zRaw);
+
+    if (fabs(xOffset) < 0.0001 && fabs(yOffset) < 0.0001) {
+      xOffset = xRaw;
+      yOffset = yRaw;
+      Serial.println("xOffset: " + String(xOffset) + "\tyOffset: " + String(yOffset));
+    }
+
+    x = (int8_t)(255 * min((xRaw - xOffset), 1));
+    y = (int8_t)(255 * min((yRaw - yOffset), 1));
+
+    // Serial.println("xRaw: " + String(xRaw) + "\tx: " + String(x) + "\tyRaw: " + String(yRaw) + "\ty: " + String(y));
+  }
+
   // Serial.println("rpm[0]: " + String(rpmAverages[0]) + "\trpm[1]: " + String(rpmAverages[1]) + "\trpm: " + String(rpmAverage));
 }
 
@@ -180,6 +223,10 @@ void handleInterrupt2() {
 }
 
 void i2cRequestHandler() {
-  Wire.write((uint8_t)(rpmAverage & 0xff));
-  Wire.write((uint8_t)(rpmAverage >> 8));
+  bytes[0] = (uint8_t)(rpmAverage & 0xff);
+  bytes[1] = (uint8_t)(rpmAverage >> 8);
+  bytes[2] = x;
+  bytes[3] = y;
+
+  Wire.write(bytes, 4);
 }

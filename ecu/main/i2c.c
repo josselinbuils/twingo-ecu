@@ -1,6 +1,8 @@
 #include <esp_log.h>
 #include "i2c.h"
 
+#include <hal/i2c_ll.h>
+
 #define TAG "I2C"
 
 bool i2c_check_device(const i2c_port_t port, const uint8_t address) {
@@ -34,6 +36,7 @@ esp_err_t i2c_init(void) {
     };
 
     i2c_param_config(i2c_master_port, &i2c_conf);
+    i2c_set_timeout(I2C_NUM_0, I2C_LL_MAX_TIMEOUT);
 
     return i2c_driver_install(i2c_master_port, i2c_conf.mode, 0, 0, 0);
 }
@@ -50,7 +53,7 @@ esp_err_t i2c_master_read_slave(const i2c_port_t i2c_num, uint8_t *data_rd, cons
     }
     i2c_master_read_byte(cmd, data_rd + size - 1, NACK_VAL);
     i2c_master_stop(cmd);
-    const esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 50 / portTICK_PERIOD_MS);
+    const esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     return ret;
 }

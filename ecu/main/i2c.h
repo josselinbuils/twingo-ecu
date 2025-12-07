@@ -13,10 +13,10 @@
 #define I2C_SCL_PIN 9
 #define I2C_SDA_PIN 8
 #define I2C_NUM 0
-#define I2C_FREQ_HZ 400000
+#define I2C_FREQ_HZ 100000
 #define I2C_TX_BUF_DISABLE 0
 #define I2C_RX_BUF_DISABLE 0
-#define I2C_TIMEOUT_MS 1000
+#define I2C_TIMEOUT_MS 50
 
 bool i2c_check_device(i2c_port_t port, uint8_t address);
 

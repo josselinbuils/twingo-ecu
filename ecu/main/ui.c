@@ -36,6 +36,8 @@ lv_obj_t *music_title_label;
 lv_obj_t *speed_limit_border_label;
 lv_obj_t *speed_limit_label;
 
+bool show_g_meter = false;
+
 lv_draw_buf_t music_cover = {
     .header =
     {
@@ -58,14 +60,16 @@ esp_err_t ui_init_lvgl(void);
 
 void ui_on_click_logo();
 
+void ui_on_gesture();
+
 void ui_on_menu_button_click(lv_event_t *event);
 
 void ui_create_main_screen() {
     main_screen = lv_obj_create(NULL);
 
     lv_obj_set_style_bg_color(main_screen, BACKGROUND_COLOR, LV_PART_MAIN);
-
-    lv_obj_clear_flag(main_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(main_screen, ui_on_gesture, LV_EVENT_GESTURE, NULL);
+    lv_obj_remove_flag(main_screen, LV_OBJ_FLAG_SCROLLABLE);
 
     // Arc indicator
 
@@ -219,11 +223,12 @@ void ui_create_main_screen() {
 
     // Add twingo logo
 
-    ui_draw_twingo_logo(main_screen, ui_on_click_logo);
+    ui_twingo_logo_draw(main_screen, ui_on_click_logo);
 
     // Add accelerometer graph
 
-    // ui_draw_g_meter(main_screen);
+    ui_g_meter_draw(main_screen);
+    ui_g_meter_hide();
 
     // Add current music
 
@@ -433,12 +438,20 @@ esp_err_t ui_init_lvgl(void) {
     return ESP_OK;
 }
 
-bool ui_lock() {
-    return lvgl_port_lock(-1);
-}
-
 void ui_on_click_logo() {
     lv_screen_load(menu_screen);
+}
+
+void ui_on_gesture() {
+    if (show_g_meter) {
+        ui_g_meter_hide();
+        ui_twingo_logo_show();
+        show_g_meter = false;
+    } else {
+        ui_twingo_logo_hide();
+        ui_g_meter_show();
+        show_g_meter = true;
+    }
 }
 
 void ui_on_menu_button_click(lv_event_t *event) {
@@ -485,6 +498,13 @@ void ui_set_current_music(char *current_music) {
         lv_label_set_text(music_title_label, music_title);
         lv_label_set_text(music_artist_label, music_artist);
         lv_obj_add_flag(cover_img, LV_OBJ_FLAG_HIDDEN);
+        lvgl_port_unlock();
+    }
+}
+
+void ui_set_g_forces(const int8_t x, const int8_t y) {
+    if (lvgl_port_lock(-1)) {
+        ui_g_meter_update(x, y);
         lvgl_port_unlock();
     }
 }
@@ -543,8 +563,4 @@ void ui_set_speed_limit(const char *speed_limit) {
         }
         lvgl_port_unlock();
     }
-}
-
-void ui_unlock() {
-    lvgl_port_unlock();
 }
